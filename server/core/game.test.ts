@@ -1,5 +1,9 @@
 import { describe, it, expect } from 'vitest'
 import { createRoom, joinRoom, setReady, startCountdown, beginRound } from './game'
+import {
+  recordKill, undoKill, endRound, endRoundByGm, kickPlayer,
+  submitGuess, nextRound, restartGame,
+} from './game'
 import { MAX_PLAYERS } from '../../constants'
 import type { Room } from './types'
 
@@ -189,5 +193,353 @@ describe('beginRound', () => {
     startCountdown(room, 'p1', NOW)
     beginRound(room, NOW, () => 0)
     for (const p of room.players.values()) expect(p.ready).toBe(false)
+  })
+})
+
+/** ห้องที่กำลังเล่นอยู่ พร้อมรู้ว่าใครเป็น GM */
+function playingRoom(n = 4): { room: Room; gmId: string; others: string[] } {
+  const room = roomWithPlayers(n)
+  startCountdown(room, 'p1', NOW)
+  beginRound(room, NOW, () => 0)
+  const gmId = room.round!.gmId
+  const others = [...room.players.keys()].filter((id) => id !== gmId)
+  return { room, gmId, others }
+}
+
+describe('recordKill', () => {
+  it('GM บันทึกคนตาย คนหลอกได้ 1 คะแนน', () => {
+    const { room, gmId, others } = playingRoom()
+    const [victim, killer] = others
+    const r = recordKill(room, gmId, victim, killer, NOW)
+
+    expect(r.ok).toBe(true)
+    expect(room.players.get(killer)!.score).toBe(1)
+    expect(room.players.get(victim)!.score).toBe(0)
+  })
+
+  it('คนตายออกจากรายชื่อคนรอด และติด wordBurned', () => {
+    const { room, gmId, others } = playingRoom()
+    const [victim, killer] = others
+    recordKill(room, gmId, victim, killer, NOW)
+
+    expect(room.round!.alive.has(victim)).toBe(false)
+    expect(room.round!.wordBurned.has(victim)).toBe(true)
+  })
+
+  it('คืนคำของคนตายเพื่อเปิดให้ดู', () => {
+    const { room, gmId, others } = playingRoom()
+    const [victim, killer] = others
+    const r = recordKill(room, gmId, victim, killer, NOW)
+    if (r.ok) expect(r.value).toBe(room.round!.assignments.get(victim))
+  })
+
+  it('คนที่ไม่ใช่ GM บันทึกไม่ได้', () => {
+    const { room, others } = playingRoom()
+    const r = recordKill(room, others[0], others[1], others[2], NOW)
+    expect(r.ok).toBe(false)
+    if (!r.ok) expect(r.code).toBe('NOT_GM')
+  })
+
+  it('คนตายกับคนหลอกเป็นคนเดียวกันไม่ได้', () => {
+    const { room, gmId, others } = playingRoom()
+    const r = recordKill(room, gmId, others[0], others[0], NOW)
+    expect(r.ok).toBe(false)
+    if (!r.ok) expect(r.code).toBe('INVALID_TARGET')
+  })
+
+  it('ฆ่าคนที่ตายไปแล้วไม่ได้', () => {
+    const { room, gmId, others } = playingRoom()
+    const [victim, killer] = others
+    recordKill(room, gmId, victim, killer, NOW)
+    const r = recordKill(room, gmId, victim, killer, NOW)
+    expect(r.ok).toBe(false)
+    if (!r.ok) expect(r.code).toBe('ALREADY_DEAD')
+  })
+
+  it('ฆ่าคนที่ไม่มีในห้องไม่ได้', () => {
+    const { room, gmId, others } = playingRoom()
+    const r = recordKill(room, gmId, 'ghost', others[0], NOW)
+    expect(r.ok).toBe(false)
+    if (!r.ok) expect(r.code).toBe('PLAYER_NOT_FOUND')
+  })
+
+  it('GM ตายเองได้ ถ้าคนหลอกเป็นคนอื่น', () => {
+    const { room, gmId, others } = playingRoom()
+    const r = recordKill(room, gmId, gmId, others[0], NOW)
+    expect(r.ok).toBe(true)
+    expect(room.round!.alive.has(gmId)).toBe(false)
+  })
+
+  it('บันทึกไม่ได้ถ้าไม่ได้อยู่ใน phase PLAYING', () => {
+    const { room, gmId, others } = playingRoom()
+    endRound(room, 'GM', NOW)
+    const r = recordKill(room, gmId, others[0], others[1], NOW)
+    expect(r.ok).toBe(false)
+    if (!r.ok) expect(r.code).toBe('WRONG_PHASE')
+  })
+
+  it('เหลือคนรอดคนเดียว รอบจบเองด้วยเหตุผล LAST_MAN', () => {
+    const { room, gmId, others } = playingRoom(4)
+    const alive = [...room.round!.alive]
+    // ฆ่าไป 3 คน เหลือ 1
+    recordKill(room, gmId, alive[0], alive[3], NOW)
+    recordKill(room, gmId, alive[1], alive[3], NOW)
+    recordKill(room, gmId, alive[2], alive[3], NOW)
+
+    expect(room.phase).toBe('ROUND_END')
+    expect(room.round!.endReason).toBe('LAST_MAN')
+  })
+})
+
+describe('undoKill', () => {
+  it('คืนสถานะรอดและหักคะแนนคนหลอกกลับ', () => {
+    const { room, gmId, others } = playingRoom()
+    const [victim, killer] = others
+    recordKill(room, gmId, victim, killer, NOW)
+
+    const r = undoKill(room, gmId, 0)
+    expect(r.ok).toBe(true)
+    expect(room.round!.alive.has(victim)).toBe(true)
+    expect(room.players.get(killer)!.score).toBe(0)
+    expect(room.round!.deaths).toHaveLength(0)
+  })
+
+  it('victim ยังติด wordBurned หลัง undo เพราะเห็นคำไปแล้ว', () => {
+    const { room, gmId, others } = playingRoom()
+    const [victim, killer] = others
+    recordKill(room, gmId, victim, killer, NOW)
+    undoKill(room, gmId, 0)
+
+    expect(room.round!.wordBurned.has(victim)).toBe(true)
+  })
+
+  it('คนที่ไม่ใช่ GM undo ไม่ได้', () => {
+    const { room, gmId, others } = playingRoom()
+    recordKill(room, gmId, others[0], others[1], NOW)
+    const r = undoKill(room, others[0], 0)
+    expect(r.ok).toBe(false)
+    if (!r.ok) expect(r.code).toBe('NOT_GM')
+  })
+
+  it('undo index ที่ไม่มีอยู่ ตอบ INVALID_TARGET', () => {
+    const { room, gmId } = playingRoom()
+    const r = undoKill(room, gmId, 5)
+    expect(r.ok).toBe(false)
+    if (!r.ok) expect(r.code).toBe('INVALID_TARGET')
+  })
+})
+
+describe('endRound', () => {
+  it('เปลี่ยนเป็น ROUND_END พร้อมเหตุผล', () => {
+    const { room } = playingRoom()
+    endRound(room, 'TIME', NOW)
+    expect(room.phase).toBe('ROUND_END')
+    expect(room.round!.endReason).toBe('TIME')
+  })
+
+  it('บันทึกรอบลงประวัติ', () => {
+    const { room, gmId, others } = playingRoom()
+    recordKill(room, gmId, others[0], others[1], NOW)
+    endRound(room, 'TIME', NOW)
+
+    expect(room.roundHistory).toHaveLength(1)
+    expect(room.roundHistory[0].round).toBe(1)
+    expect(room.roundHistory[0].deaths).toHaveLength(1)
+  })
+
+  it('จำ GM ของรอบนี้ไว้เลี่ยงสุ่มซ้ำ', () => {
+    const { room, gmId } = playingRoom()
+    endRound(room, 'TIME', NOW)
+    expect(room.lastGmId).toBe(gmId)
+  })
+
+  it('จบรอบซ้ำไม่มีผล', () => {
+    const { room } = playingRoom()
+    endRound(room, 'TIME', NOW)
+    const r = endRound(room, 'GM', NOW)
+    expect(r.ok).toBe(false)
+    if (!r.ok) expect(r.code).toBe('WRONG_PHASE')
+    expect(room.roundHistory).toHaveLength(1)
+  })
+})
+
+describe('submitGuess', () => {
+  it('ทายถูกได้ 1 คะแนน', () => {
+    const { room, others } = playingRoom()
+    const p = others[0]
+    const word = room.round!.assignments.get(p)!
+    endRound(room, 'TIME', NOW)
+
+    const r = submitGuess(room, p, word)
+    expect(r.ok).toBe(true)
+    if (r.ok) expect(r.value).toBe(true)
+    expect(room.players.get(p)!.score).toBe(1)
+  })
+
+  it('ทายผิดไม่ได้คะแนน', () => {
+    const { room, others } = playingRoom()
+    const p = others[0]
+    endRound(room, 'TIME', NOW)
+
+    const r = submitGuess(room, p, 'คำที่ไม่มีทางถูก')
+    expect(r.ok).toBe(true)
+    if (r.ok) expect(r.value).toBe(false)
+    expect(room.players.get(p)!.score).toBe(0)
+  })
+
+  it('พิมพ์วรรณยุกต์ผิดยังถือว่าถูก', () => {
+    const { room, others } = playingRoom()
+    const p = others[0]
+    const word = room.round!.assignments.get(p)!
+    endRound(room, 'TIME', NOW)
+
+    const r = submitGuess(room, p, word.replace(/[็-๎]/g, ''))
+    if (r.ok) expect(r.value).toBe(true)
+  })
+
+  it('ทายซ้ำครั้งที่สองไม่ได้', () => {
+    const { room, others } = playingRoom()
+    const p = others[0]
+    endRound(room, 'TIME', NOW)
+    submitGuess(room, p, 'ผิด')
+
+    const r = submitGuess(room, p, room.round!.assignments.get(p)!)
+    expect(r.ok).toBe(false)
+    if (!r.ok) expect(r.code).toBe('ALREADY_GUESSED')
+  })
+
+  it('คนที่ตายไปแล้วทายไม่ได้', () => {
+    const { room, gmId, others } = playingRoom()
+    const [victim, killer] = others
+    recordKill(room, gmId, victim, killer, NOW)
+    endRound(room, 'TIME', NOW)
+
+    const r = submitGuess(room, victim, room.round!.assignments.get(victim)!)
+    expect(r.ok).toBe(false)
+    if (!r.ok) expect(r.code).toBe('CANNOT_GUESS')
+  })
+
+  it('ทายได้เฉพาะตอน ROUND_END', () => {
+    const { room, others } = playingRoom()
+    const p = others[0]
+    const r = submitGuess(room, p, room.round!.assignments.get(p)!)
+    expect(r.ok).toBe(false)
+    if (!r.ok) expect(r.code).toBe('WRONG_PHASE')
+  })
+})
+
+describe('nextRound', () => {
+  it('host ไปรอบต่อไปได้ คะแนนสะสมไม่หาย', () => {
+    const { room, gmId, others } = playingRoom()
+    recordKill(room, gmId, others[0], others[1], NOW)
+    endRound(room, 'TIME', NOW)
+
+    const scoreBefore = room.players.get(others[1])!.score
+    const r = nextRound(room, 'p1', NOW, () => 0)
+
+    expect(r.ok).toBe(true)
+    expect(room.phase).toBe('PLAYING')
+    expect(room.currentRound).toBe(2)
+    expect(room.players.get(others[1])!.score).toBe(scoreBefore)
+  })
+
+  it('คนที่ไม่ใช่ host ไปรอบต่อไปไม่ได้', () => {
+    const { room, others } = playingRoom()
+    endRound(room, 'TIME', NOW)
+    const r = nextRound(room, others[0], NOW, () => 0)
+    expect(r.ok).toBe(false)
+    if (!r.ok) expect(r.code).toBe('NOT_HOST')
+  })
+
+  it('ครบจำนวนรอบแล้วเข้า GAME_END แทน', () => {
+    const room = roomWithPlayers(4)
+    room.totalRounds = 1
+    startCountdown(room, 'p1', NOW)
+    beginRound(room, NOW, () => 0)
+    endRound(room, 'TIME', NOW)
+
+    const r = nextRound(room, 'p1', NOW, () => 0)
+    expect(r.ok).toBe(true)
+    expect(room.phase).toBe('GAME_END')
+  })
+})
+
+describe('restartGame', () => {
+  it('คืนห้องกลับสู่ LOBBY และล้างคะแนน', () => {
+    const room = roomWithPlayers(4)
+    room.totalRounds = 1
+    startCountdown(room, 'p1', NOW)
+    beginRound(room, NOW, () => 0)
+    endRound(room, 'TIME', NOW)
+    nextRound(room, 'p1', NOW, () => 0)
+
+    const r = restartGame(room, 'p1', NOW)
+    expect(r.ok).toBe(true)
+    expect(room.phase).toBe('LOBBY')
+    expect(room.currentRound).toBe(0)
+    expect(room.roundHistory).toHaveLength(0)
+    expect(room.usedPackIds).toHaveLength(0)
+    for (const p of room.players.values()) {
+      expect(p.score).toBe(0)
+      expect(p.ready).toBe(false)
+    }
+  })
+
+  it('เล่นอีกรอบได้เฉพาะตอนจบเกม', () => {
+    const { room } = playingRoom()
+    const r = restartGame(room, 'p1', NOW)
+    expect(r.ok).toBe(false)
+    if (!r.ok) expect(r.code).toBe('WRONG_PHASE')
+  })
+})
+
+describe('endRoundByGm', () => {
+  it('คนที่ไม่ใช่ GM จบรอบไม่ได้', () => {
+    const { room, others } = playingRoom()
+    const r = endRoundByGm(room, others[0], 2_000)
+    expect(r.ok).toBe(false)
+    if (!r.ok) expect(r.code).toBe('NOT_GM')
+  })
+
+  it('GM จบรอบได้ และ endReason เป็น GM', () => {
+    const { room, gmId } = playingRoom()
+    const r = endRoundByGm(room, gmId, 2_000)
+    expect(r.ok).toBe(true)
+    expect(room.phase).toBe('ROUND_END')
+    expect(room.round!.endReason).toBe('GM')
+  })
+})
+
+describe('kickPlayer', () => {
+  it('host เตะคนอื่นออกได้ตอน LOBBY', () => {
+    const room = roomWithPlayers(3)
+    const target = [...room.players.keys()].find((id) => id !== room.hostId)!
+    expect(kickPlayer(room, room.hostId, target, 1_000).ok).toBe(true)
+    expect(room.players.has(target)).toBe(false)
+  })
+
+  it('คนที่ไม่ใช่ host เตะไม่ได้', () => {
+    const room = roomWithPlayers(3)
+    const ids = [...room.players.keys()]
+    const notHost = ids.find((id) => id !== room.hostId)!
+    const other = ids.find((id) => id !== room.hostId && id !== notHost)!
+    const r = kickPlayer(room, notHost, other, 1_000)
+    expect(r.ok).toBe(false)
+    if (!r.ok) expect(r.code).toBe('NOT_HOST')
+  })
+
+  it('เตะตัวเองไม่ได้', () => {
+    const room = roomWithPlayers(3)
+    const r = kickPlayer(room, room.hostId, room.hostId, 1_000)
+    expect(r.ok).toBe(false)
+    if (!r.ok) expect(r.code).toBe('INVALID_TARGET')
+  })
+
+  it('เตะระหว่างเล่นไม่ได้', () => {
+    const { room, others } = playingRoom()
+    const target = others[0]
+    const r = kickPlayer(room, room.hostId, target, 1_000)
+    expect(r.ok).toBe(false)
+    if (!r.ok) expect(r.code).toBe('WRONG_PHASE')
   })
 })

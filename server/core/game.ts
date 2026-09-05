@@ -1,7 +1,10 @@
 import { COUNTDOWN_MS, MAX_PLAYERS, MIN_PLAYERS } from '../../constants'
 import { dealWords, loadPacks, pickPack } from './packs'
+import { addScore, isCorrectGuess } from './scoring'
 import { roundDurationMs } from './timing'
-import { fail, ok, type Player, type Result, type Room } from './types'
+import {
+  fail, ok, type EndReason, type Player, type Result, type Room, type Round, type RoundSummary,
+} from './types'
 
 export function createRoom(
   code: string,
@@ -126,6 +129,200 @@ export function beginRound(
   }
 
   return ok(undefined)
+}
+
+/**
+ * GM บันทึกว่าใครตายและใครเป็นคนหลอกสำเร็จ
+ * คืนคำของคนตายเพื่อเปิดให้ทุกคนเห็น
+ */
+export function recordKill(
+  room: Room,
+  gmId: string,
+  victimId: string,
+  killerId: string,
+  now: number,
+): Result<string> {
+  const round = room.round
+  if (room.phase !== 'PLAYING' || !round) {
+    return fail('WRONG_PHASE', 'บันทึกได้เฉพาะตอนกำลังเล่น')
+  }
+  if (gmId !== round.gmId) {
+    return fail('NOT_GM', 'เฉพาะ Game Master เท่านั้น')
+  }
+  if (victimId === killerId) {
+    return fail('INVALID_TARGET', 'คนตายกับคนหลอกต้องเป็นคนละคน')
+  }
+  if (!room.players.has(victimId) || !room.players.has(killerId)) {
+    return fail('PLAYER_NOT_FOUND', 'ไม่พบผู้เล่นคนนี้ในห้อง')
+  }
+  if (!round.alive.has(victimId)) {
+    return fail('ALREADY_DEAD', 'คนนี้ตายไปแล้ว')
+  }
+
+  round.alive.delete(victimId)
+  round.wordBurned.add(victimId)
+  round.deaths.push({ victimId, killerId, at: now })
+  addScore(room, killerId, 1)
+  room.lastActivityAt = now
+
+  // เหลือคนรอดคนเดียว รอบจบทันที
+  if (round.alive.size <= 1) {
+    endRound(room, 'LAST_MAN', now)
+  }
+
+  return ok(round.assignments.get(victimId)!)
+}
+
+/**
+ * ยกเลิกการบันทึกที่กดผิด
+ * victim กลับมาเล่นต่อได้ แต่ยังติด wordBurned เพราะเห็นคำตัวเองไปแล้ว
+ */
+export function undoKill(room: Room, gmId: string, deathIndex: number): Result {
+  const round = room.round
+  if (room.phase !== 'PLAYING' || !round) {
+    return fail('WRONG_PHASE', 'ยกเลิกได้เฉพาะตอนกำลังเล่น')
+  }
+  if (gmId !== round.gmId) {
+    return fail('NOT_GM', 'เฉพาะ Game Master เท่านั้น')
+  }
+
+  const death = round.deaths[deathIndex]
+  if (!death) return fail('INVALID_TARGET', 'ไม่พบรายการที่จะยกเลิก')
+
+  round.deaths.splice(deathIndex, 1)
+  round.alive.add(death.victimId)
+  addScore(room, death.killerId, -1)
+  // ไม่ลบออกจาก wordBurned โดยเจตนา — เห็นคำไปแล้วย้อนไม่ได้
+
+  return ok(undefined)
+}
+
+export function endRound(room: Room, reason: EndReason, now: number): Result {
+  const round = room.round
+  if (room.phase !== 'PLAYING' || !round) {
+    return fail('WRONG_PHASE', 'รอบนี้จบไปแล้ว')
+  }
+
+  round.endReason = reason
+  room.phase = 'ROUND_END'
+  room.lastGmId = round.gmId
+  room.lastActivityAt = now
+  room.roundHistory.push(summarize(room, round, reason))
+
+  return ok(undefined)
+}
+
+/** เวอร์ชันที่ GM เรียกเอง — แยกจาก endRound เพราะ endRound ถูกเรียกจาก timer ที่ไม่มีตัวตน */
+export function endRoundByGm(room: Room, gmId: string, now: number): Result {
+  if (room.round?.gmId !== gmId) {
+    return fail('NOT_GM', 'เฉพาะ Game Master เท่านั้น')
+  }
+  return endRound(room, 'GM', now)
+}
+
+/** host เตะคนออกจากห้อง ทำได้เฉพาะตอนอยู่ใน LOBBY */
+export function kickPlayer(room: Room, hostId: string, targetId: string, now: number): Result {
+  if (hostId !== room.hostId) {
+    return fail('NOT_HOST', 'เฉพาะเจ้าของห้องเท่านั้น')
+  }
+  if (room.phase !== 'LOBBY') {
+    return fail('WRONG_PHASE', 'เตะคนได้เฉพาะตอนรออยู่ในห้อง')
+  }
+  if (targetId === hostId) {
+    return fail('INVALID_TARGET', 'เตะตัวเองไม่ได้')
+  }
+  if (!room.players.delete(targetId)) {
+    return fail('PLAYER_NOT_FOUND', 'ไม่พบผู้เล่นคนนี้ในห้อง')
+  }
+
+  room.lastActivityAt = now
+  return ok(undefined)
+}
+
+/** ทายคำของตัวเองตอนจบรอบ ถูกได้ 1 คะแนน ส่งได้ครั้งเดียว */
+export function submitGuess(room: Room, playerId: string, text: string): Result<boolean> {
+  const round = room.round
+  if (room.phase !== 'ROUND_END' || !round) {
+    return fail('WRONG_PHASE', 'ทายคำได้เฉพาะตอนจบรอบ')
+  }
+  if (round.guesses.has(playerId)) {
+    return fail('ALREADY_GUESSED', 'คุณส่งคำตอบไปแล้ว')
+  }
+  if (!round.alive.has(playerId) || round.wordBurned.has(playerId)) {
+    return fail('CANNOT_GUESS', 'คุณเห็นคำของตัวเองไปแล้ว ทายไม่ได้')
+  }
+
+  const answer = round.assignments.get(playerId)
+  if (!answer) return fail('PLAYER_NOT_FOUND', 'ไม่พบคำของคุณ')
+
+  const correct = isCorrectGuess(text, answer)
+  round.guesses.set(playerId, { text, correct })
+  if (correct) addScore(room, playerId, 1)
+
+  // อัปเดตประวัติรอบล่าสุดให้สะท้อนคนที่ทายถูก
+  const last = room.roundHistory.at(-1)
+  if (last && correct) last.correctGuessers.push(playerId)
+
+  return ok(correct)
+}
+
+export function nextRound(
+  room: Room,
+  hostId: string,
+  now: number,
+  rng: () => number = Math.random,
+): Result {
+  if (hostId !== room.hostId) {
+    return fail('NOT_HOST', 'เฉพาะเจ้าของห้องเท่านั้น')
+  }
+  if (room.phase !== 'ROUND_END') {
+    return fail('WRONG_PHASE', 'ยังไม่จบรอบ')
+  }
+
+  if (room.currentRound >= room.totalRounds) {
+    room.phase = 'GAME_END'
+    room.lastActivityAt = now
+    return ok(undefined)
+  }
+
+  return beginRound(room, now, rng)
+}
+
+/** เล่นใหม่ด้วยคนกลุ่มเดิมในห้องเดิม */
+export function restartGame(room: Room, hostId: string, now: number): Result {
+  if (hostId !== room.hostId) {
+    return fail('NOT_HOST', 'เฉพาะเจ้าของห้องเท่านั้น')
+  }
+  if (room.phase !== 'GAME_END') {
+    return fail('WRONG_PHASE', 'เกมยังไม่จบ')
+  }
+
+  room.phase = 'LOBBY'
+  room.currentRound = 0
+  room.round = null
+  room.roundHistory = []
+  room.usedPackIds = []
+  room.lastGmId = null
+  room.countdownEndsAt = null
+  room.lastActivityAt = now
+  for (const p of room.players.values()) {
+    p.score = 0
+    p.ready = false
+  }
+
+  return ok(undefined)
+}
+
+function summarize(room: Room, round: Round, reason: EndReason): RoundSummary {
+  return {
+    round: room.currentRound,
+    packTheme: round.packTheme,
+    gmId: round.gmId,
+    endReason: reason,
+    deaths: [...round.deaths],
+    words: Object.fromEntries(round.assignments),
+    correctGuessers: [],
+  }
 }
 
 function newPlayer(id: string, name: string, now: number): Player {

@@ -2428,16 +2428,15 @@ function summarize(room: Room, round: Round, reason: EndReason): RoundSummary {
 ```ts
 describe('endRoundByGm', () => {
   it('คนที่ไม่ใช่ GM จบรอบไม่ได้', () => {
-    const room = playingRoom()
-    const notGm = [...room.players.keys()].find((id) => id !== room.round!.gmId)!
-    const r = endRoundByGm(room, notGm, 2_000)
+    const { room, others } = playingRoom()
+    const r = endRoundByGm(room, others[0], 2_000)
     expect(r.ok).toBe(false)
     if (!r.ok) expect(r.code).toBe('NOT_GM')
   })
 
   it('GM จบรอบได้ และ endReason เป็น GM', () => {
-    const room = playingRoom()
-    const r = endRoundByGm(room, room.round!.gmId, 2_000)
+    const { room, gmId } = playingRoom()
+    const r = endRoundByGm(room, gmId, 2_000)
     expect(r.ok).toBe(true)
     expect(room.phase).toBe('ROUND_END')
     expect(room.round!.endReason).toBe('GM')
@@ -2446,14 +2445,14 @@ describe('endRoundByGm', () => {
 
 describe('kickPlayer', () => {
   it('host เตะคนอื่นออกได้ตอน LOBBY', () => {
-    const room = lobbyRoom(3)
+    const room = roomWithPlayers(3)
     const target = [...room.players.keys()].find((id) => id !== room.hostId)!
     expect(kickPlayer(room, room.hostId, target, 1_000).ok).toBe(true)
     expect(room.players.has(target)).toBe(false)
   })
 
   it('คนที่ไม่ใช่ host เตะไม่ได้', () => {
-    const room = lobbyRoom(3)
+    const room = roomWithPlayers(3)
     const ids = [...room.players.keys()]
     const notHost = ids.find((id) => id !== room.hostId)!
     const other = ids.find((id) => id !== room.hostId && id !== notHost)!
@@ -2463,15 +2462,15 @@ describe('kickPlayer', () => {
   })
 
   it('เตะตัวเองไม่ได้', () => {
-    const room = lobbyRoom(3)
+    const room = roomWithPlayers(3)
     const r = kickPlayer(room, room.hostId, room.hostId, 1_000)
     expect(r.ok).toBe(false)
     if (!r.ok) expect(r.code).toBe('INVALID_TARGET')
   })
 
   it('เตะระหว่างเล่นไม่ได้', () => {
-    const room = playingRoom()
-    const target = [...room.players.keys()].find((id) => id !== room.hostId)!
+    const { room, others } = playingRoom()
+    const target = others[0]
     const r = kickPlayer(room, room.hostId, target, 1_000)
     expect(r.ok).toBe(false)
     if (!r.ok) expect(r.code).toBe('WRONG_PHASE')
@@ -2479,7 +2478,7 @@ describe('kickPlayer', () => {
 })
 ```
 
-`lobbyRoom(n)` และ `playingRoom()` คือ helper ที่เขียนไว้แล้วในไฟล์เทสนี้ตั้งแต่ Task 7 — ถ้ายังไม่มี ให้เพิ่ม `lobbyRoom(n)` ที่สร้างห้องแล้ว join จนครบ n คนและกดพร้อมทุกคน กับ `playingRoom()` ที่เรียก `lobbyRoom(4)` ต่อด้วย `startCountdown` และ `beginRound` ด้วย `rng` คงที่
+เทสชุดนี้ใช้ helper `roomWithPlayers(n)` และ `playingRoom()` ที่เขียนไว้แล้วในไฟล์เทสเดียวกัน (Task 7 Step 1 และ Task 8 Step 1) — `playingRoom()` คืน `{ room, gmId, others }` ไม่ใช่ `Room` ตรงๆ
 
 - [ ] **Step 4: รันเทสให้เขียว**
 

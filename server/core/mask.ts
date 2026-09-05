@@ -44,6 +44,7 @@ export function maskFor(room: Room, viewerId: string): MaskedRoomState {
     countdownEndsAt: room.countdownEndsAt,
     deaths: round?.deaths ?? [],
     endReason: round?.endReason ?? null,
+    // roundHistory ถูก push เฉพาะตอน endRound — คำของรอบที่จบแล้วเปิดให้ทุกคนอยู่แล้ว จึงส่งผ่านได้ทั้งก้อน
     roundHistory: room.roundHistory,
   }
 }
@@ -52,6 +53,9 @@ export function maskFor(room: Room, viewerId: string): MaskedRoomState {
 function visibleWord(room: Room, viewerId: string, targetId: string): string | null {
   const round = room.round
   if (!round) return null
+
+  // viewer ที่ไม่อยู่ในห้อง (id เก่า, race ระหว่าง auth กับ player map) ต้องไม่เห็นคำใครเลย
+  if (!room.players.has(viewerId)) return null
 
   const word = round.assignments.get(targetId) ?? null
   if (word === null) return null

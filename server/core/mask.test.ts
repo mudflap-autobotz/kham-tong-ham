@@ -175,3 +175,42 @@ describe('maskFor — ธงสถานะ', () => {
     expect(s.players.map((p) => p.id)).toEqual(IDS)
   })
 })
+
+describe('maskFor — viewer ที่ไม่อยู่ในห้อง ต้องไม่เห็นคำใครเลย', () => {
+  it('viewer id แปลกปลอมไม่เห็นคำใครเลยตอน PLAYING', () => {
+    const room = makeRoom({ phase: 'PLAYING' })
+    const json = JSON.stringify(maskFor(room, 'ghost'))
+    for (const id of IDS) {
+      expect(json, `คำของ ${id} หลุดไปหา viewer แปลกปลอม`).not.toContain(WORDS[id])
+    }
+  })
+
+  it('viewer id แปลกปลอมไม่เห็นคำใครเลยตอน ROUND_END', () => {
+    const room = makeRoom({ phase: 'ROUND_END' })
+    const json = JSON.stringify(maskFor(room, 'ghost'))
+    for (const id of IDS) {
+      expect(json, `คำของ ${id} หลุดไปหา viewer แปลกปลอม`).not.toContain(WORDS[id])
+    }
+  })
+})
+
+describe('maskFor — roundHistory', () => {
+  it('roundHistory ส่งผ่านทั้งก้อนให้ทุกคนเหมือนกัน เพราะคำของรอบที่จบแล้วเปิดอยู่แล้ว', () => {
+    const room = makeRoom({ phase: 'PLAYING' })
+    room.roundHistory = [
+      {
+        round: 1,
+        packTheme: 'ของกินริมทาง',
+        gmId: 'p2',
+        endReason: 'TIME',
+        deaths: [],
+        words: WORDS,
+        correctGuessers: ['p1'],
+      },
+    ]
+
+    for (const viewer of IDS) {
+      expect(maskFor(room, viewer).roundHistory).toEqual(room.roundHistory)
+    }
+  })
+})

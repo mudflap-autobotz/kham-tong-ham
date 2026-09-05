@@ -97,7 +97,7 @@
 - Consumes: ไม่มี (task แรก)
 - Produces: โปรเจกต์ที่รัน `npm test` และ `npm run dev` ได้ + mockup ที่เปิดดูได้ในเบราว์เซอร์
 
-**เป้าหมายของ mockup:** เห็น flow และหน้าตาจริงก่อนเขียน React ทุกหน้าเป็น HTML นิ่งๆ ข้อมูลปลอมฝังในไฟล์ ใช้ Tailwind ผ่าน CDN เปิดไฟล์ดูได้เลยโดยไม่ต้อง build
+**เป้าหมายของ mockup:** เห็น flow และหน้าตาจริงก่อนเขียน React ทุกหน้าเป็น HTML นิ่งๆ ข้อมูลปลอมฝังในไฟล์ ใช้ CSS มือเขียนใน `docs/mockups/style.css` (ไม่ใช่ Tailwind CDN — สเปกหัวข้อ 2 เขียนว่า CDN แต่เนื้อ mockup ที่แผนนี้กำหนดใช้ class ของตัวเอง `.card` `.btn` `.word` ทั้งหมด การใส่ script CDN ที่ไม่มีใครเรียกใช้จึงเป็นของเกิน) เปิดไฟล์ดูได้เลยโดยไม่ต้อง build — React จริงใน Task 13-16 ใช้ Tailwind v4 ที่ build จริง ไม่เกี่ยวกับไฟล์ mockup
 
 - [ ] **Step 1: สร้าง git repo และไฟล์ ignore**
 
@@ -284,6 +284,8 @@ npm run typecheck
 npx vitest run --passWithNoTests
 ```
 Expected: typecheck ผ่าน, vitest รายงานว่าไม่มีเทส (ยังไม่มีไฟล์เทส — ถูกต้อง)
+
+`npm test` เปล่าๆ (ไม่มี `--passWithNoTests`) จะ exit 1 จนกว่า Task 3 จะมีไฟล์เทสไฟล์แรก — เป็นพฤติกรรมปกติของ vitest เมื่อไม่มีเทสเลย ไม่ใช่ pipeline พัง ตอนตรวจ Task 1 กับ Task 2 ให้ใช้คำสั่งข้างบนแทน
 
 - [ ] **Step 8: เขียน `docs/mockups/style.css`**
 

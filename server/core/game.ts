@@ -207,10 +207,22 @@ export function recordKill(
 /**
  * ยกเลิกการบันทึกที่กดผิด
  * victim กลับมาเล่นต่อได้ แต่ยังติด wordBurned เพราะเห็นคำตัวเองไปแล้ว
+ *
+ * รับได้ถึงหลังรอบจบ เฉพาะกรณีที่การบันทึกครั้งสุดท้ายเป็นตัวที่ปิดรอบเอง (LAST_MAN)
+ * ไม่งั้นการกดผิดครั้งสุดท้ายของรอบจะแก้ไม่ได้เลย
+ * คืน resumed=true เมื่อรอบถูกดึงกลับมาเล่นต่อ เพื่อให้ชั้น socket ตั้งนาฬิกาใหม่
  */
-export function undoKill(room: Room, gmId: string, deathIndex: number): Result {
+export function undoKill(
+  room: Room, gmId: string, deathIndex: number,
+): Result<{ resumed: boolean }> {
   const round = room.round
-  if (room.phase !== 'PLAYING' || !round) {
+  if (!round) return fail('WRONG_PHASE', 'ยกเลิกได้เฉพาะตอนกำลังเล่น')
+
+  const isLastDeath = deathIndex === round.deaths.length - 1
+  const canResume =
+    room.phase === 'ROUND_END' && round.endReason === 'LAST_MAN' && isLastDeath
+
+  if (room.phase !== 'PLAYING' && !canResume) {
     return fail('WRONG_PHASE', 'ยกเลิกได้เฉพาะตอนกำลังเล่น')
   }
   if (gmId !== round.gmId) {
@@ -225,7 +237,19 @@ export function undoKill(room: Room, gmId: string, deathIndex: number): Result {
   addScore(room, death.killerId, -1)
   // ไม่ลบออกจาก wordBurned โดยเจตนา — เห็นคำไปแล้วย้อนไม่ได้
 
-  return ok(undefined)
+  if (!canResume) return ok({ resumed: false })
+
+  // ดึงรอบกลับมาเล่นต่อ — endsAt คงเดิม นาฬิกาจึงเดินต่อจากจุดที่ค้างไว้
+  room.phase = 'PLAYING'
+  round.endReason = null
+  room.roundHistory.pop()
+  // คำทายที่ส่งเข้ามาช่วงที่รอบจบไปแล้ว ต้องคืนทั้งคะแนนและสิทธิ์ทาย ไม่งั้นได้คะแนนซ้ำตอนรอบจบอีกครั้ง
+  for (const [playerId, guess] of round.guesses) {
+    if (guess.correct) addScore(room, playerId, -1)
+  }
+  round.guesses.clear()
+
+  return ok({ resumed: true })
 }
 
 export function endRound(room: Room, reason: EndReason, now: number): Result {

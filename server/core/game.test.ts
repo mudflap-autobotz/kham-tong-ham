@@ -332,6 +332,95 @@ describe('undoKill', () => {
   })
 })
 
+describe('undoKill ข้ามเส้นจบรอบ (LAST_MAN)', () => {
+  /** ฆ่าจนเหลือคนรอดคนเดียว รอบจะปิดตัวเองด้วย LAST_MAN */
+  function lastManRoom() {
+    const { room, gmId } = playingRoom(4)
+    const alive = [...room.round!.alive]
+    const survivor = alive[3]
+    recordKill(room, gmId, alive[0], survivor, NOW)
+    recordKill(room, gmId, alive[1], survivor, NOW)
+    recordKill(room, gmId, alive[2], survivor, NOW)
+    return { room, gmId, survivor, lastVictim: alive[2] }
+  }
+
+  it('undo การบันทึกตัวที่ปิดรอบ ดึงรอบกลับมาเล่นต่อ', () => {
+    const { room, gmId } = lastManRoom()
+    const r = undoKill(room, gmId, room.round!.deaths.length - 1)
+
+    expect(r.ok).toBe(true)
+    if (r.ok) expect(r.value.resumed).toBe(true)
+    expect(room.phase).toBe('PLAYING')
+    expect(room.round!.endReason).toBeNull()
+  })
+
+  it('เหยื่อกลับมารอด คะแนนคนหลอกถูกหักคืน และประวัติรอบถูกถอนออก', () => {
+    const { room, gmId, survivor, lastVictim } = lastManRoom()
+    expect(room.roundHistory).toHaveLength(1)
+    const scoreBefore = room.players.get(survivor)!.score
+
+    undoKill(room, gmId, room.round!.deaths.length - 1)
+
+    expect(room.round!.alive.has(lastVictim)).toBe(true)
+    expect(room.players.get(survivor)!.score).toBe(scoreBefore - 1)
+    expect(room.roundHistory).toHaveLength(0)
+    expect(room.round!.deaths).toHaveLength(2)
+  })
+
+  it('เหยื่อยังติด wordBurned — เห็นคำตัวเองไปแล้วย้อนไม่ได้', () => {
+    const { room, gmId, lastVictim } = lastManRoom()
+    undoKill(room, gmId, room.round!.deaths.length - 1)
+    expect(room.round!.wordBurned.has(lastVictim)).toBe(true)
+  })
+
+  it('นาฬิกาเดินต่อจากเดิม ไม่ถูกตั้งใหม่', () => {
+    const { room, gmId } = lastManRoom()
+    const endsAt = room.round!.endsAt
+    undoKill(room, gmId, room.round!.deaths.length - 1)
+    expect(room.round!.endsAt).toBe(endsAt)
+  })
+
+  it('ล้างคำทายที่ส่งเข้ามาหลังรอบจบ พร้อมคืนคะแนนที่ได้จากคำทายนั้น', () => {
+    const { room, gmId, survivor } = lastManRoom()
+    const scoreAfterKills = room.players.get(survivor)!.score
+    submitGuess(room, survivor, room.round!.assignments.get(survivor)!)
+    expect(room.players.get(survivor)!.score).toBe(scoreAfterKills + 1)
+
+    undoKill(room, gmId, room.round!.deaths.length - 1)
+
+    expect(room.round!.guesses.size).toBe(0)
+    // -1 จากคำทายที่ถูกล้าง -1 จากการฆ่าที่ถูก undo
+    expect(room.players.get(survivor)!.score).toBe(scoreAfterKills - 1)
+  })
+
+  it('undo รายการที่ไม่ใช่ตัวสุดท้าย ยังถูกปฏิเสธตอน ROUND_END', () => {
+    const { room, gmId } = lastManRoom()
+    const r = undoKill(room, gmId, 0)
+    expect(r.ok).toBe(false)
+    if (!r.ok) expect(r.code).toBe('WRONG_PHASE')
+  })
+
+  it('รอบที่จบด้วย TIME ยัง undo ไม่ได้ — นั่นไม่ใช่การกดผิด', () => {
+    const { room, gmId, others } = playingRoom()
+    recordKill(room, gmId, others[0], others[1], NOW)
+    endRound(room, 'TIME', NOW)
+
+    const r = undoKill(room, gmId, 0)
+    expect(r.ok).toBe(false)
+    if (!r.ok) expect(r.code).toBe('WRONG_PHASE')
+  })
+
+  it('รอบที่ GM สั่งจบเอง ยัง undo ไม่ได้', () => {
+    const { room, gmId, others } = playingRoom()
+    recordKill(room, gmId, others[0], others[1], NOW)
+    endRoundByGm(room, gmId, NOW)
+
+    const r = undoKill(room, gmId, 0)
+    expect(r.ok).toBe(false)
+    if (!r.ok) expect(r.code).toBe('WRONG_PHASE')
+  })
+})
+
 describe('leaveRoom', () => {
   it('ออกจาก LOBBY แล้วที่นั่งหายไปจริง ไม่ใช่แค่ขึ้นว่าหลุด', () => {
     const room = roomWithPlayers(4)

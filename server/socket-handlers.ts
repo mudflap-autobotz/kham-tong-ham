@@ -241,6 +241,17 @@ export function registerHandlers(io: Server, store: RoomStore, deps: Deps = {}):
         if (!ctx) return
         const r = undoKill(ctx.room, ctx.playerId, input.deathIndex)
         if (!r.ok) return sendError(socket, r.code, r.message)
+
+        // undo ที่ดึงรอบกลับมาเล่นต่อ ต้องตั้งนาฬิกาจบรอบใหม่ ที่เดิมถูกยกเลิกไปตอนรอบจบ
+        if (r.value.resumed) {
+          io.to(ctx.room.code).emit('round:started', {
+            round: ctx.room.currentRound,
+            gmId: ctx.room.round!.gmId,
+            packTheme: ctx.room.round!.packTheme,
+            endsAt: ctx.room.round!.endsAt,
+          })
+          scheduleRoundEnd(ctx.room)
+        }
         broadcast(ctx.room)
       })
     })

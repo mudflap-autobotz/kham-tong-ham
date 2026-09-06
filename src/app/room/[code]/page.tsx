@@ -19,8 +19,9 @@ export default function RoomPage() {
 
   // เข้าลิงก์ตรงหรือ refresh — ต่อ socket แล้ว join ห้องนี้ด้วยตัวตนเดิม
   // ref กัน re-render ยิง join ซ้ำ: `api` เป็น object ใหม่ทุกครั้งที่ render
+  // ไม่เช็ค api.state เพราะ state ค้างอยู่ตอนหลุด ถ้าเช็คจะ join กลับไม่ได้เลย
   useEffect(() => {
-    if (!api.connected || api.state || joinSent.current) return
+    if (!api.connected || joinSent.current) return
     const name = getPlayerName()
     if (!name) {
       router.replace(`/?code=${code}`)
@@ -31,6 +32,7 @@ export default function RoomPage() {
   }, [api, code, router])
 
   // หลุดแล้วต่อกลับมา ต้องยอมให้ join ใหม่ได้อีกครั้ง
+  // socket ใหม่ = server ไม่รู้จักเราแล้ว ต้องยิง room:join ซ้ำเพื่อคืนที่นั่งเดิม
   useEffect(() => {
     if (!api.connected) joinSent.current = false
   }, [api.connected])

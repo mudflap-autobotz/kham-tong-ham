@@ -2,7 +2,7 @@
 
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { MIN_PLAYERS } from '../../../constants'
+import { COPY_FEEDBACK_MS, MIN_PLAYERS } from '../../../constants'
 import type { RoomApi } from '../../lib/use-room'
 
 export function Lobby({ api }: { api: RoomApi }) {
@@ -19,7 +19,7 @@ export function Lobby({ api }: { api: RoomApi }) {
     try {
       await navigator.clipboard.writeText(url)
       setCopied(true)
-      setTimeout(() => setCopied(false), 2000)
+      setTimeout(() => setCopied(false), COPY_FEEDBACK_MS)
     } catch {
       // เบราว์เซอร์บางตัวบล็อก clipboard — ให้ผู้ใช้ก๊อปจาก address bar เอง
       window.prompt('คัดลอกลิงก์นี้', url)

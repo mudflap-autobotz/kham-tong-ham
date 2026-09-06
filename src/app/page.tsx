@@ -2,11 +2,14 @@
 
 import { useEffect, useState } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
-import { DEFAULT_ROUNDS, MAX_NAME_LENGTH, ROOM_CODE_LENGTH } from '../../constants'
+import {
+  DEFAULT_ROUNDS,
+  MAX_NAME_LENGTH,
+  ROOM_CODE_LENGTH,
+  ROUND_CHOICES,
+} from '../../constants'
 import { getPlayerName } from '../lib/socket-client'
 import { useRoom } from '../lib/use-room'
-
-const ROUND_CHOICES = [3, 5, 7, 10]
 
 export default function HomePage() {
   const router = useRouter()

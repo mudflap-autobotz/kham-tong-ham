@@ -40,3 +40,7 @@ export const RECONNECT_GRACE_MS = 30_000
 export const COUNTDOWN_TICK_MS = 250
 /** เหลือเวลาน้อยกว่านี้ ตัวเลขเปลี่ยนเป็นสีแดงเตือน */
 export const TIME_WARNING_SECONDS = 30
+/** ตัวเลือกจำนวนรอบที่หน้าแรกให้กด — ต้องอยู่ในช่วง MIN_ROUNDS..MAX_ROUNDS */
+export const ROUND_CHOICES = [3, 5, 7, 10]
+/** ป้าย "คัดลอกแล้ว" ค้างไว้เท่านี้ก่อนกลับเป็นข้อความเดิม */
+export const COPY_FEEDBACK_MS = 2_000

@@ -198,8 +198,8 @@ describe('maskFor — viewer ที่ไม่อยู่ในห้อง �
 })
 
 describe('maskFor — roundHistory', () => {
-  it('roundHistory ส่งผ่านทั้งก้อนให้ทุกคนเหมือนกัน เพราะคำของรอบที่จบแล้วเปิดอยู่แล้ว', () => {
-    const room = makeRoom({ phase: 'PLAYING' })
+  function withHistory(phase: Phase): Room {
+    const room = makeRoom({ phase })
     room.roundHistory = [
       {
         round: 1,
@@ -211,9 +211,42 @@ describe('maskFor — roundHistory', () => {
         correctGuessers: ['p1'],
       },
     ]
+    return room
+  }
 
+  it('ประวัติรอบส่งให้ทุกคนเหมือนกัน ต่างกันแค่ words', () => {
+    const room = withHistory('PLAYING')
+    const first = maskFor(room, IDS[0]).roundHistory
     for (const viewer of IDS) {
-      expect(maskFor(room, viewer).roundHistory).toEqual(room.roundHistory)
+      expect(maskFor(room, viewer).roundHistory).toEqual(first)
+    }
+  })
+
+  it('ตอน GAME_END เปิด words ของทุกรอบ', () => {
+    const room = withHistory('GAME_END')
+    expect(maskFor(room, 'p1').roundHistory[0].words).toEqual(WORDS)
+  })
+
+  it('ตอน PLAYING ตัด words ออก แต่เก็บส่วนที่เหลือของประวัติไว้', () => {
+    const room = withHistory('PLAYING')
+    const h = maskFor(room, 'p1').roundHistory[0]
+    expect(h.words).toEqual({})
+    expect(h.round).toBe(1)
+    expect(h.correctGuessers).toEqual(['p1'])
+  })
+
+  it('ไม่แก้ roundHistory ตัวจริงของห้อง', () => {
+    const room = withHistory('PLAYING')
+    maskFor(room, 'p1')
+    expect(room.roundHistory[0].words).toEqual(WORDS)
+  })
+
+  it('มีประวัติรอบเก่าอยู่ คำของผู้ชมก็ยังไม่หลุดใน payload ทั้งก้อนตอน PLAYING', () => {
+    // pack ถูกวนใช้ซ้ำ ชุดคำของรอบเก่าจึงแคบวงคำของรอบปัจจุบันให้เดาได้
+    const room = withHistory('PLAYING')
+    for (const id of IDS) {
+      const json = JSON.stringify(maskFor(room, id))
+      expect(json, `คำของ ${id} หลุดผ่าน roundHistory`).not.toContain(WORDS[id])
     }
   })
 })

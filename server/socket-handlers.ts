@@ -167,7 +167,7 @@ export function registerHandlers(io: Server, store: RoomStore, deps: Deps = {}):
         }
 
         const playerId = input.playerId ?? nanoid()
-        const result = joinRoom(room, input.name, playerId, now())
+        const result = joinRoom(room, input.name, playerId, input.sessionToken ?? null, now())
         if (!result.ok) {
           sendError(socket, result.code, result.message)
           return

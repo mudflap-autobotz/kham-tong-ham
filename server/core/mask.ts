@@ -46,6 +46,7 @@ export function maskFor(room: Room, viewerId: string): MaskedRoomState {
     endReason: round?.endReason ?? null,
     // roundHistory ถูก push เฉพาะตอน endRound — คำของรอบที่จบแล้วเปิดให้ทุกคนอยู่แล้ว จึงส่งผ่านได้ทั้งก้อน
     roundHistory: room.roundHistory,
+    sessionToken: room.players.get(viewerId)?.sessionToken ?? '',
   }
 }
 

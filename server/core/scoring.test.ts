@@ -63,7 +63,7 @@ function roomWith(scores: Record<string, number>): Room {
     players: new Map(
       Object.entries(scores).map(([id, score]) => [
         id,
-        { id, name: id, connected: true, ready: true, score, joinedAt: 0 },
+        { id, name: id, connected: true, ready: true, score, joinedAt: 0, sessionToken: `tok-${id}` },
       ]),
     ),
     round: null,

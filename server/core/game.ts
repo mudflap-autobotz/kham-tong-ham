@@ -1,3 +1,4 @@
+import { nanoid } from 'nanoid'
 import { COUNTDOWN_MS, MAX_PLAYERS, MIN_PLAYERS } from '../../constants'
 import { dealWords, loadPacks, pickPack } from './packs'
 import { addScore, isCorrectGuess } from './scoring'
@@ -38,12 +39,17 @@ export function joinRoom(
   room: Room,
   name: string,
   playerId: string,
+  sessionToken: string | null,
   now: number,
 ): Result<Player> {
   room.lastActivityAt = now
 
   const existing = room.players.get(playerId)
   if (existing) {
+    // playerId เป็นของสาธารณะ (ทุกคนเห็นใน MaskedPlayer.id) จึงพิสูจน์ตัวตนไม่ได้ด้วยตัวเอง
+    if (existing.sessionToken !== sessionToken) {
+      return fail('BAD_SESSION', 'ตัวตนนี้ถูกใช้อยู่แล้ว กรุณาเข้าร่วมด้วยชื่อใหม่')
+    }
     existing.connected = true
     return ok(existing)
   }
@@ -326,7 +332,10 @@ function summarize(room: Room, round: Round, reason: EndReason): RoundSummary {
 }
 
 function newPlayer(id: string, name: string, now: number): Player {
-  return { id, name, connected: true, ready: false, score: 0, joinedAt: now }
+  return {
+    id, name, connected: true, ready: false, score: 0, joinedAt: now,
+    sessionToken: nanoid(),
+  }
 }
 
 /** เลี่ยงคนที่เพิ่งเป็น GM ถ้ายังมีคนอื่นให้เลือก */

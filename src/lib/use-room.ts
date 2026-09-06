@@ -2,7 +2,9 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import type { ErrorCode, MaskedPlayer, MaskedRoomState } from '../../server/core/types'
-import { getPlayerId, getSocket, savePlayerName } from './socket-client'
+import {
+  getPlayerId, getSessionToken, getSocket, savePlayerName, saveSessionToken,
+} from './socket-client'
 
 type RoomError = { code: ErrorCode; message: string }
 
@@ -15,6 +17,7 @@ export function useRoom() {
     const socket = getSocket()
 
     const onState = (s: MaskedRoomState) => {
+      saveSessionToken(s.code, s.sessionToken)
       setState(s)
       setError(null)
     }
@@ -64,7 +67,13 @@ export function useRoom() {
     joinRoom: useCallback(
       (code: string, name: string) => {
         savePlayerName(name)
-        emit('room:join', { code: code.toUpperCase(), name, playerId: getPlayerId() })
+        const upper = code.toUpperCase()
+        emit('room:join', {
+          code: upper,
+          name,
+          playerId: getPlayerId(),
+          sessionToken: getSessionToken(upper) ?? undefined,
+        })
       },
       [emit],
     ),

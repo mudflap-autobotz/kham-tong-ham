@@ -6,17 +6,20 @@ import {
 
 const playerName = z.string().trim().min(1, 'กรุณากรอกชื่อ').max(MAX_NAME_LENGTH)
 const playerId = z.string().min(1).max(MAX_PLAYER_ID_LENGTH)
+const sessionToken = z.string().max(MAX_PLAYER_ID_LENGTH).optional()
 
 export const createRoomSchema = z.object({
   name: playerName,
   totalRounds: z.number().int().min(MIN_ROUNDS).max(MAX_ROUNDS),
   playerId: playerId.optional(),
+  sessionToken,
 })
 
 export const joinRoomSchema = z.object({
   code: z.string().trim().length(ROOM_CODE_LENGTH),
   name: playerName,
   playerId: playerId.optional(),
+  sessionToken,
 })
 
 export const readySchema = z.object({ ready: z.boolean() })

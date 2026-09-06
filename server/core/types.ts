@@ -9,6 +9,8 @@ export type Player = {
   ready: boolean
   score: number
   joinedAt: number
+  /** ความลับที่ใช้พิสูจน์ตัวตนตอน reconnect — ห้ามใส่ใน MaskedPlayer เด็ดขาด */
+  sessionToken: string
 }
 
 export type Death = {
@@ -103,6 +105,8 @@ export type MaskedRoomState = {
   deaths: Death[]
   endReason: EndReason | null
   roundHistory: RoundSummary[]
+  /** token ของผู้ชมคนนี้คนเดียว — maskFor เรียกต่อ viewer จึงไม่รั่วข้ามคน */
+  sessionToken: string
 }
 
 /** ผลลัพธ์ของทุกฟังก์ชันใน core ที่อาจปฏิเสธคำสั่ง */
@@ -116,6 +120,7 @@ export type ErrorCode =
   | 'SERVER_FULL'
   | 'RATE_LIMITED'
   | 'NOT_HOST'
+  | 'BAD_SESSION'
   | 'NOT_GM'
   | 'WRONG_PHASE'
   | 'NOT_ENOUGH_PLAYERS'

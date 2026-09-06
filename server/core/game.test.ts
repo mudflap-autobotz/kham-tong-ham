@@ -12,13 +12,16 @@ const NOW = 1_000_000
 function roomWithPlayers(n: number, ready = true): Room {
   const room = createRoom('ABC234', 'P1', 3, 'p1', NOW)
   for (let i = 2; i <= n; i++) {
-    joinRoom(room, `P${i}`, `p${i}`, NOW)
+    joinRoom(room, `P${i}`, `p${i}`, null, NOW)
   }
   if (ready) {
     for (const id of room.players.keys()) setReady(room, id, true)
   }
   return room
 }
+
+/** token ของ player ที่ server ออกให้ — reconnect ที่ถูกต้องต้องยื่นค่านี้ */
+const tokenOf = (room: Room, id: string) => room.players.get(id)!.sessionToken
 
 describe('createRoom', () => {
   it('host เข้าห้องทันทีและเป็นเจ้าของห้อง', () => {
@@ -39,7 +42,7 @@ describe('createRoom', () => {
 describe('joinRoom', () => {
   it('คนใหม่เข้าห้องได้', () => {
     const room = roomWithPlayers(1)
-    const r = joinRoom(room, 'มานี', 'p2', NOW)
+    const r = joinRoom(room, 'มานี', 'p2', null, NOW)
     expect(r.ok).toBe(true)
     expect(room.players.size).toBe(2)
   })
@@ -49,7 +52,7 @@ describe('joinRoom', () => {
     room.players.get('p2')!.score = 7
     room.players.get('p2')!.connected = false
 
-    const r = joinRoom(room, 'ชื่ออื่น', 'p2', NOW + 100)
+    const r = joinRoom(room, 'ชื่ออื่น', 'p2', tokenOf(room, 'p2'), NOW + 100)
     expect(r.ok).toBe(true)
     expect(room.players.size).toBe(2)
     expect(room.players.get('p2')!.score).toBe(7)
@@ -58,7 +61,7 @@ describe('joinRoom', () => {
 
   it('ห้องเต็มแล้วเข้าไม่ได้', () => {
     const room = roomWithPlayers(MAX_PLAYERS)
-    const r = joinRoom(room, 'เกินมา', 'extra', NOW)
+    const r = joinRoom(room, 'เกินมา', 'extra', null, NOW)
     expect(r.ok).toBe(false)
     if (!r.ok) expect(r.code).toBe('ROOM_FULL')
   })
@@ -66,7 +69,7 @@ describe('joinRoom', () => {
   it('คนเดิมกลับเข้าห้องที่เต็มได้ (reconnect ไม่ถูกกันด้วยเพดาน)', () => {
     const room = roomWithPlayers(MAX_PLAYERS)
     room.players.get('p2')!.connected = false
-    const r = joinRoom(room, 'P2', 'p2', NOW)
+    const r = joinRoom(room, 'P2', 'p2', tokenOf(room, 'p2'), NOW)
     expect(r.ok).toBe(true)
   })
 
@@ -74,7 +77,7 @@ describe('joinRoom', () => {
     const room = roomWithPlayers(4)
     startCountdown(room, 'p1', NOW)
     beginRound(room, NOW, () => 0)
-    const r = joinRoom(room, 'สาย', 'late', NOW)
+    const r = joinRoom(room, 'สาย', 'late', null, NOW)
     expect(r.ok).toBe(false)
     if (!r.ok) expect(r.code).toBe('WRONG_PHASE')
   })

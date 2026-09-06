@@ -226,11 +226,105 @@ describe('reconnect', () => {
 
     const back = connect()
     const p = once<MaskedRoomState>(back, 'state:sync')
-    back.emit('room:join', { code: host.state.code, name: 'มานี', playerId: originalId })
+    back.emit('room:join', {
+      code: host.state.code,
+      name: 'มานี',
+      playerId: originalId,
+      sessionToken: g.state.sessionToken,
+    })
     const st = await p
 
     expect(st.viewerId).toBe(originalId)
     expect(st.players).toHaveLength(2)
+  })
+})
+
+/** พา 3 คนเข้าถึง PLAYING พร้อม view ต่อคน ใช้ทดสอบเรื่องตัวตน */
+async function playingTrio() {
+  const host = await createRoom('สมชาย', 2)
+  const g1 = await joinRoom(host.state.code, 'มานี')
+  const g2 = await joinRoom(host.state.code, 'ปิติ')
+
+  const seats = [
+    { s: host.socket, state: host.state, view: track(host.socket) },
+    { s: g1.socket, state: g1.state, view: track(g1.socket) },
+    { s: g2.socket, state: g2.state, view: track(g2.socket) },
+  ]
+  for (const x of seats) x.s.emit('player:ready', { ready: true })
+  await seats[0].view.until((s) => s.players.every((p) => p.ready))
+
+  host.socket.emit('game:start')
+  await Promise.all(seats.map((x) => x.view.until((s) => s.phase === 'PLAYING')))
+
+  return { code: host.state.code, seats }
+}
+
+describe('sessionToken กันการสวมตัวตน', () => {
+  it('สวม id ของคนอื่นโดยไม่มี token ถูกปฏิเสธ และไม่ได้เห็นคำของเขา', async () => {
+    const { code, seats } = await playingTrio()
+    const victim = seats[1]
+    const victimId = victim.state.viewerId
+
+    const attacker = connect()
+    const leaked: MaskedRoomState[] = []
+    attacker.on('state:sync', (s: MaskedRoomState) => leaked.push(s))
+
+    const err = once<{ code: string }>(attacker, 'error')
+    attacker.emit('room:join', { code, name: 'คนแอบอ้าง', playerId: victimId })
+    expect((await err).code).toBe('BAD_SESSION')
+
+    await new Promise((r) => setTimeout(r, 200))
+    expect(leaked.some((s) => s.viewerId === victimId), 'ผู้บุกรุกได้มุมมองของเหยื่อ').toBe(false)
+
+    const victimNow = victim.view.current
+    expect(victimNow.players.find((p) => p.id === victimId)!.word).toBeNull()
+  })
+
+  it('สวม id ของคนอื่นด้วย token มั่ว ถูกปฏิเสธเช่นกัน', async () => {
+    const { code, seats } = await playingTrio()
+    const victimId = seats[1].state.viewerId
+
+    const attacker = connect()
+    const leaked: MaskedRoomState[] = []
+    attacker.on('state:sync', (s: MaskedRoomState) => leaked.push(s))
+
+    const err = once<{ code: string }>(attacker, 'error')
+    attacker.emit('room:join', {
+      code,
+      name: 'คนแอบอ้าง',
+      playerId: victimId,
+      sessionToken: 'token-มั่ว',
+    })
+    expect((await err).code).toBe('BAD_SESSION')
+
+    await new Promise((r) => setTimeout(r, 200))
+    expect(leaked.some((s) => s.viewerId === victimId)).toBe(false)
+  })
+
+  it('เจ้าตัวหลุดแล้วกลับมาด้วย token ที่ถูก ได้ที่นั่งเดิมคืน และยังไม่เห็นคำตัวเอง', async () => {
+    const { code, seats } = await playingTrio()
+    const me = seats[2]
+    const myId = me.state.viewerId
+    const scoreBefore = me.view.current.players.find((p) => p.id === myId)!.score
+
+    me.s.disconnect()
+    await new Promise((r) => setTimeout(r, 100))
+
+    const back = connect()
+    const p = once<MaskedRoomState>(back, 'state:sync')
+    back.emit('room:join', {
+      code,
+      name: 'ปิติ',
+      playerId: myId,
+      sessionToken: me.state.sessionToken,
+    })
+    const st = await p
+
+    expect(st.viewerId).toBe(myId)
+    expect(st.phase).toBe('PLAYING')
+    const meAgain = st.players.find((p) => p.id === myId)!
+    expect(meAgain.score).toBe(scoreBefore)
+    expect(meAgain.word, 'กลับเข้ามาแล้วต้องยังไม่เห็นคำตัวเอง').toBeNull()
   })
 })
 

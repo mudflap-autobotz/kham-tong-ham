@@ -28,7 +28,10 @@ function makeRoom(opts: {
     players: new Map(
       IDS.map((id) => [
         id,
-        { id, name: id.toUpperCase(), connected: true, ready: true, score: 0, joinedAt: 0 },
+        {
+          id, name: id.toUpperCase(), connected: true, ready: true, score: 0, joinedAt: 0,
+          sessionToken: `tok-${id}`,
+        },
       ]),
     ),
     round: hasRound

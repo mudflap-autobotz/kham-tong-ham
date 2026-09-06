@@ -3,7 +3,8 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import type { ErrorCode, MaskedPlayer, MaskedRoomState } from '../../server/core/types'
 import {
-  getPlayerId, getSessionToken, getSocket, savePlayerName, saveSessionToken,
+  getPlayerId, getSessionToken, getSocket, resetIdentity,
+  savePlayerName, saveSessionToken,
 } from './socket-client'
 
 type RoomError = { code: ErrorCode; message: string }
@@ -17,11 +18,17 @@ export function useRoom() {
     const socket = getSocket()
 
     const onState = (s: MaskedRoomState) => {
-      saveSessionToken(s.code, s.sessionToken)
+      // เว้นค่าว่าง — maskFor คืน '' เมื่อ viewer ไม่อยู่ใน room.players แล้ว
+      // (อีกแท็บออกจากห้องไป) ถ้าเขียนทับจะทำให้แท็บนี้เสียสิทธิ์ที่นั่งตัวเอง
+      if (s.sessionToken) saveSessionToken(s.code, s.sessionToken)
       setState(s)
       setError(null)
     }
-    const onError = (e: RoomError) => setError(e)
+    const onError = (e: RoomError) => {
+      // ตัวตนใช้ไม่ได้แล้ว ทิ้งของเก่าทันที ไม่งั้นลองใหม่กี่ครั้งก็โดนปฏิเสธเหมือนเดิม
+      if (e.code === 'BAD_SESSION') resetIdentity()
+      setError(e)
+    }
     const onConnect = () => setConnected(true)
     const onDisconnect = () => setConnected(false)
 

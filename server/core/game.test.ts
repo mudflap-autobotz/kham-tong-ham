@@ -373,6 +373,29 @@ describe('undoKill ข้ามเส้นจบรอบ (LAST_MAN)', () => {
     expect(room.round!.wordBurned.has(lastVictim)).toBe(true)
   })
 
+  it('คนที่ยังรอดติด wordBurned ด้วย — ROUND_END เปิดคำให้เห็นไปแล้ว', () => {
+    const { room, gmId, survivor, lastVictim } = lastManRoom()
+    undoKill(room, gmId, room.round!.deaths.length - 1)
+
+    // ทั้งคนที่รอดมาตลอด และเหยื่อที่เพิ่งถูกดึงกลับมา ต่างเห็นคำตัวเองตอนรอบจบ
+    expect(room.round!.wordBurned.has(survivor)).toBe(true)
+    expect(room.round!.wordBurned.has(lastVictim)).toBe(true)
+  })
+
+  it('เล่นรอบต่อจนจบอีกครั้ง ไม่มีใครได้สิทธิ์ทายฟรี', () => {
+    const { room, gmId, survivor } = lastManRoom()
+    undoKill(room, gmId, room.round!.deaths.length - 1)
+    const scoreBefore = room.players.get(survivor)!.score
+
+    endRound(room, 'GM', NOW)
+
+    // ทายไม่ได้แล้ว เพราะเห็นคำตัวเองไปตอนรอบจบครั้งแรก
+    const r = submitGuess(room, survivor, room.round!.assignments.get(survivor)!)
+    expect(r.ok).toBe(false)
+    if (!r.ok) expect(r.code).toBe('CANNOT_GUESS')
+    expect(room.players.get(survivor)!.score).toBe(scoreBefore)
+  })
+
   it('นาฬิกาเดินต่อจากเดิม ไม่ถูกตั้งใหม่', () => {
     const { room, gmId } = lastManRoom()
     const endsAt = room.round!.endsAt

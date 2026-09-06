@@ -62,3 +62,18 @@ export function saveSessionToken(code: string, token: string): void {
     // localStorage เต็มหรือถูกปิด — เล่นต่อได้ แค่ reconnect ไม่ได้
   }
 }
+
+/**
+ * ถอนตัวตนทิ้งแล้วขึ้นใหม่ — ใช้ตอนโดน BAD_SESSION
+ * ถ้า token หายไปแต่ playerId ยังอยู่ เจ้าของที่นั่งตัวจริงจะถูกล็อกออกถาวร
+ * เพราะ server เห็น id เดิมแต่ token ไม่ตรง ต้องทิ้ง id เก่าถึงจะเข้าใหม่ได้
+ */
+export function resetIdentity(): void {
+  if (typeof window === 'undefined') return
+  try {
+    localStorage.removeItem(PLAYER_ID_KEY)
+    localStorage.removeItem(SESSION_KEY)
+  } catch {
+    // อ่านเขียนไม่ได้ก็ทำอะไรต่อไม่ได้ ปล่อยให้ error เดิมแสดงไป
+  }
+}

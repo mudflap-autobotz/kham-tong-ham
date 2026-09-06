@@ -19,9 +19,13 @@ export function RoundEnd({ api }: { api: RoomApi }) {
   const isLastRound = state.currentRound >= state.totalRounds
 
   const standings = [...state.players].sort((a, b) => b.score - a.score)
+  // เว้นที่ล่างจอเฉพาะตอนมีแถบเครื่องมือ GM จริง ไม่งั้นทุกคนต้องเลื่อนผ่านที่ว่าง
+  const showGmToolbar = api.isGm && state.endReason === 'LAST_MAN'
 
   return (
-    <main className="mx-auto flex min-h-dvh max-w-md flex-col gap-3 p-4 pb-56">
+    <main
+      className={`mx-auto flex min-h-dvh max-w-md flex-col gap-3 p-4 ${showGmToolbar ? 'pb-56' : ''}`}
+    >
       <h2 className="text-xl font-bold">
         จบรอบ {state.currentRound} — {END_REASON_TEXT[state.endReason ?? ''] ?? ''}
       </h2>
@@ -102,7 +106,7 @@ export function RoundEnd({ api }: { api: RoomApi }) {
       )}
 
       {/* รอบที่ปิดตัวเองเพราะเหลือคนสุดท้าย ยังย้อนการบันทึกตัวนั้นได้ */}
-      {api.isGm && state.endReason === 'LAST_MAN' && <GmToolbar api={api} />}
+      {showGmToolbar && <GmToolbar api={api} />}
     </main>
   )
 }

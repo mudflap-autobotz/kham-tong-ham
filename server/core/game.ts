@@ -42,8 +42,6 @@ export function joinRoom(
   sessionToken: string | null,
   now: number,
 ): Result<Player> {
-  room.lastActivityAt = now
-
   const existing = room.players.get(playerId)
   if (existing) {
     // playerId เป็นของสาธารณะ (ทุกคนเห็นใน MaskedPlayer.id) จึงพิสูจน์ตัวตนไม่ได้ด้วยตัวเอง
@@ -51,8 +49,11 @@ export function joinRoom(
       return fail('BAD_SESSION', 'ตัวตนนี้ถูกใช้อยู่แล้ว กรุณาเข้าร่วมด้วยชื่อใหม่')
     }
     existing.connected = true
+    room.lastActivityAt = now
     return ok(existing)
   }
+
+  room.lastActivityAt = now
 
   if (room.phase !== 'LOBBY') {
     return fail('WRONG_PHASE', 'เกมเริ่มไปแล้ว เข้าร่วมไม่ได้')
@@ -243,6 +244,9 @@ export function undoKill(
   room.phase = 'PLAYING'
   round.endReason = null
   room.roundHistory.pop()
+  // ROUND_END เปิดคำทุกคนไปแล้ว คนที่ยังรอดจึงเห็นคำตัวเองครบทุกคน
+  // เล่นต่อได้แต่หมดสิทธิ์ทาย เหมือนกรณีตายแล้ว undo — เห็นคำแล้วย้อนไม่ได้
+  for (const id of round.alive) round.wordBurned.add(id)
   // คำทายที่ส่งเข้ามาช่วงที่รอบจบไปแล้ว ต้องคืนทั้งคะแนนและสิทธิ์ทาย ไม่งั้นได้คะแนนซ้ำตอนรอบจบอีกครั้ง
   for (const [playerId, guess] of round.guesses) {
     if (guess.correct) addScore(room, playerId, -1)

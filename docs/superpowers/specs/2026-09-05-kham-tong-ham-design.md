@@ -83,7 +83,7 @@ integration test เปิด Socket.IO server จริงบน port สุ่
 |---|---|
 | ฐานข้อมูล | state อยู่ใน memory ตามที่ตัดสินใจไว้ ไม่มีอะไรต้องเก็บข้ามการรีสตาร์ท |
 | Redis | ยังไม่จำเป็นที่ instance เดียว — ดูข้อจำกัดที่รู้ตัวในหัวข้อการจัดการห้อง |
-| ระบบ auth | ผู้เล่นแค่กรอกชื่อ ตัวตนผูกกับ `playerId` ใน localStorage |
+| ระบบ auth | ผู้เล่นแค่กรอกชื่อ ตัวตนผูกกับ `playerId` + `sessionToken` ใน localStorage ไม่มี account ไม่มีรหัสผ่าน |
 | state library (Redux/Zustand) | server เป็นแหล่งความจริงเดียว client แค่ถือ `MaskedRoomState` ก้อนเดียวใน hook |
 | TanStack Query | ไม่มี HTTP data fetching เลย — state มาจาก `state:sync` ที่ server push เอง ไม่ต้อง cache ไม่ต้อง revalidate ใส่ไปก็เป็นแค่ `useState` ที่ถูกห่อ |
 | Playwright / E2E | เกมเล่นเห็นหน้ากัน ตรวจ UI ด้วยตาจาก mockup พอ |
@@ -112,7 +112,8 @@ type Room = {
 }
 
 type Player = {
-  id: string                // uuid เก็บใน localStorage → ใช้ reconnect
+  id: string                // uuid เก็บใน localStorage → ตัวตนสาธารณะ ทุกคนเห็น
+  sessionToken: string      // ความลับของเจ้าตัว → พิสูจน์สิทธิ์ตอน reconnect
   name: string
   connected: boolean
   ready: boolean
@@ -142,6 +143,7 @@ type Pack = { id: string; theme: string; words: string[] }
 ### หลักการที่ยึด
 
 - `Player.id` แยกจาก socket id — refresh หน้า/เน็ตหลุดแล้วกลับเข้าห้องเดิมได้ ไม่กลายเป็นคนใหม่
+- `Player.id` เปิดเผยได้ แต่ `Player.sessionToken` ห้ามหลุดออกจากเจ้าตัว — ดูหัวข้อตัวตนใน §4
 - `assignments` อยู่ที่ server เท่านั้น ทุก payload ที่ส่งออกต้องผ่าน `maskFor()`
 - `endsAt` เป็น timestamp ไม่ใช่ตัวนับ — server ไม่ broadcast ทุกวินาที
 - `hostId` ≠ `gmId` — host คุมห้อง (ตั้งค่า/เริ่มเกม/เตะคน/ไปรอบต่อไป), GM คุมรอบ (บันทึกคนตาย/จบรอบ)
@@ -164,7 +166,7 @@ type Pack = { id: string; theme: string; words: string[] }
 | Event | Payload | สิทธิ์ |
 |---|---|---|
 | `room:create` | `{ name, totalRounds }` | ใครก็ได้ |
-| `room:join` | `{ code, name, playerId? }` | ใครก็ได้ |
+| `room:join` | `{ code, name, playerId?, sessionToken? }` | ใครก็ได้ |
 | `room:leave` | — | ทุกคนในห้อง |
 | `player:ready` | `{ ready: boolean }` | ทุกคน (เฉพาะ `LOBBY`) |
 | `game:start` | — | host |
@@ -173,6 +175,8 @@ type Pack = { id: string; theme: string; words: string[] }
 | `gm:endRound` | — | GM ของรอบนั้น |
 | `guess:submit` | `{ text }` | คนที่รอด ตอน `ROUND_END` |
 | `round:next` | — | host ตอน `ROUND_END` |
+| `room:kick` | `{ playerId }` | host (เฉพาะ `LOBBY`) |
+| `game:restart` | — | host ตอน `GAME_END` |
 
 ### Server → Client
 
@@ -205,7 +209,27 @@ function maskFor(room: Room, viewerId: string): MaskedRoomState
 - **ตรวจสิทธิ์ที่ server ทุก event** — `gm:kill` จากคนที่ไม่ใช่ GM ต้องตอบ `error` ไม่ใช่แค่ซ่อนปุ่มใน UI
 - **`gm:undoKill`** — คืนสถานะ alive และคืนคะแนน −1 ให้คนหลอก แต่ victim ยังติด `wordBurned` (เห็นคำไปแล้ว เล่นต่อได้แต่หมดสิทธิ์ทาย)
 - **`guess:submit`** — ตรวจฝั่ง server, normalize ก่อนเทียบ, ส่งได้ครั้งเดียวต่อรอบ
-- **reconnect** — `room:join` พร้อม `playerId` เดิม คืนคะแนน คำ และสิทธิ์ GM ให้ครบ
+- **reconnect** — `room:join` พร้อม `playerId` **และ `sessionToken`** เดิม คืนคะแนน คำ และสิทธิ์ GM ให้ครบ
+
+### ตัวตน: `playerId` เปิดเผย · `sessionToken` เป็นความลับ
+
+`playerId` เป็นของสาธารณะ — ทุกคนเห็นใน `MaskedPlayer.id` เพราะ UI ต้องอ้างถึงกัน
+(กดเลือกคนตาย เลือกคนหลอก เตะคน) จึงพิสูจน์ตัวตนด้วยตัวเองไม่ได้:
+ใครก็ตามที่เปิด devtools ก๊อป `id` ของเพื่อนแล้ว `room:join` ทับได้ทันที
+ผลคืออ่านคำตัวเองจาก `state:sync` ได้ และได้สิทธิ์ host/GM ของคนนั้นไปด้วย — invariant ทั้งหมดของ `maskFor` พังลงตรงนี้
+
+จึงแยกเป็นสองค่า:
+
+| ค่า | ใครเห็น | หน้าที่ |
+|---|---|---|
+| `playerId` | ทุกคนในห้อง | ตัวตนสาธารณะ ใช้ชี้ตัวใน UI และใน payload |
+| `sessionToken` | เจ้าตัวคนเดียว | ความลับที่พิสูจน์ว่า "ฉันคือเจ้าของที่นั่งนี้จริง" |
+
+- `maskFor(room, viewerId)` ใส่ `sessionToken` ของ **viewer คนนั้นคนเดียว** ไว้ที่ระดับบนสุดของ `MaskedRoomState`
+  ห้ามอยู่ใน `MaskedPlayer` เด็ดขาด — ถ้าอยู่ใน array ของผู้เล่น เท่ากับแจกกุญแจของทุกคนให้ทุกคน
+- `room:join` ที่ส่ง `playerId` ซึ่งมีอยู่แล้วในห้อง แต่ `sessionToken` ไม่ตรง → ตอบ `error` รหัส `BAD_SESSION`
+- client เก็บ token แยกต่อห้องใน localStorage และเมื่อโดน `BAD_SESSION` ต้องทิ้งทั้ง `playerId` และ token แล้วขึ้นตัวตนใหม่
+  ไม่งั้นจะลองเข้าใหม่ด้วยของเก่าที่ใช้ไม่ได้วนไปเรื่อยๆ
 
 ## 5. หน้าจอและ flow
 

@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import { RoomStore } from './room-store'
+import { restartGame } from './game'
 import {
   EMPTY_ROOM_TTL_MS, FINISHED_ROOM_TTL_MS, MAX_ROOMS,
   ROOM_CODE_LENGTH, STALE_LOBBY_TTL_MS,
@@ -85,10 +86,33 @@ describe('RoomStore.sweep', () => {
     expect(store.get(code)).toBeDefined()
   })
 
-  it('ลบห้อง LOBBY ที่ไม่เคยเริ่มเกมนานเกิน TTL แม้ยังมีคนค้าง', () => {
-    const { store, code } = storeWith(() => {})
+  it('ลบห้อง LOBBY ที่ไม่เคยเริ่มเกมนานเกิน TTL เมื่อไม่มีใครต่ออยู่แล้ว', () => {
+    const { store, code } = storeWith((s, c) => {
+      for (const p of s.get(c)!.players.values()) p.connected = false
+    })
     store.sweep(NOW + STALE_LOBBY_TTL_MS + 1)
     expect(store.get(code)).toBeUndefined()
+  })
+
+  it('ไม่ลบห้อง LOBBY เก่าที่ยังมีคนต่ออยู่ — "ห้ามลบห้องที่มีคน" ชนะเกณฑ์ stale-lobby', () => {
+    const { store, code } = storeWith(() => {})
+    store.sweep(NOW + STALE_LOBBY_TTL_MS + 1)
+    expect(store.get(code)).toBeDefined()
+  })
+
+  it('ห้องที่เพิ่งกด "เล่นอีกรอบ" ไม่ถูกกวาด แม้สร้างมานานเกิน TTL แล้ว', () => {
+    const { store, code } = storeWith((s, c) => {
+      const room = s.get(c)!
+      room.phase = 'GAME_END'
+      // เล่นจนจบเกมกินเวลานานกว่า TTL ของ stale-lobby ได้ตามปกติ
+      for (const p of room.players.values()) p.connected = false
+    })
+    const later = NOW + STALE_LOBBY_TTL_MS + 1
+    const room = store.get(code)!
+    expect(restartGame(room, 'p1', later).ok).toBe(true)
+
+    store.sweep(later)
+    expect(store.get(code)).toBeDefined()
   })
 
   it('ลบห้องที่จบเกมแล้วนานเกิน TTL', () => {

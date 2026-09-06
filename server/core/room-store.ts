@@ -61,7 +61,10 @@ export class RoomStore {
     const idleFor = now - room.lastActivityAt
 
     if (!anyoneHere && idleFor > EMPTY_ROOM_TTL_MS) return true
-    if (room.phase === 'LOBBY' && now - room.createdAt > STALE_LOBBY_TTL_MS) return true
+    // spec สั่งทั้ง "ลบ LOBBY เก่าเกิน 60 นาที" และ "ห้ามลบห้องที่ยังมีคนอยู่" — ข้อหลังชนะ
+    if (!anyoneHere && room.phase === 'LOBBY' && now - room.createdAt > STALE_LOBBY_TTL_MS) {
+      return true
+    }
     if (room.phase === 'GAME_END' && idleFor > FINISHED_ROOM_TTL_MS) return true
 
     return false

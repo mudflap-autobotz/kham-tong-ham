@@ -540,10 +540,12 @@ describe('restartGame', () => {
     endRound(room, 'TIME', NOW)
     nextRound(room, 'p1', NOW, () => 0)
 
-    const r = restartGame(room, 'p1', NOW)
+    const r = restartGame(room, 'p1', NOW + 1_000)
     expect(r.ok).toBe(true)
     expect(room.phase).toBe('LOBBY')
     expect(room.currentRound).toBe(0)
+    // นับอายุห้องใหม่ ไม่งั้นเกณฑ์ stale-lobby กวาดห้องที่เพิ่งเริ่มเล่นใหม่
+    expect(room.createdAt).toBe(NOW + 1_000)
     expect(room.roundHistory).toHaveLength(0)
     expect(room.usedPackIds).toHaveLength(0)
     for (const p of room.players.values()) {

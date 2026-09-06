@@ -331,6 +331,8 @@ export function restartGame(room: Room, hostId: string, now: number): Result {
   room.phase = 'LOBBY'
   room.currentRound = 0
   room.round = null
+  // เกมใหม่คือห้องใหม่ในทางปฏิบัติ — ไม่งั้นเกณฑ์ stale-lobby นับต่อจากห้องเดิมแล้วกวาดทิ้งกลางวง
+  room.createdAt = now
   room.roundHistory = []
   room.usedPackIds = []
   room.lastGmId = null

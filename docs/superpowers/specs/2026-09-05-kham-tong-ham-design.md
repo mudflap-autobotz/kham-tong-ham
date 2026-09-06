@@ -91,8 +91,11 @@ integration test เปิด Socket.IO server จริงบน port สุ่
 ### ข้อควรระวังเรื่อง deploy
 
 Next 16 ที่รันบน custom server **deploy บน Vercel ไม่ได้** (Vercel รันเป็น serverless ไม่มี process ค้างสำหรับ WebSocket)
-ต้อง deploy บนที่ที่รัน Node process ยาวได้ — VPS, Railway, Fly.io, หรือ Docker บนเครื่องตัวเอง
+ต้อง deploy บนที่ที่รัน Node process ยาวได้ — Google Cloud Run, Railway, Fly.io, VPS, หรือ Docker บนเครื่องตัวเอง
 ข้อนี้เป็นผลจากการเลือก Socket.IO + in-memory state และรับไว้แล้วตั้งแต่ต้น
+
+ทุกที่ต้องรัน **instance เดียว** ห้ามเปิด autoscaling — ห้องอยู่ใน memory ของ process เดียว
+วิธี deploy จริงพร้อมค่าที่ต้องตั้ง อยู่ใน `docs/deploy.md`
 
 ## 3. Data model
 

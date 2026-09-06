@@ -363,7 +363,8 @@ function markDisconnected(room: Room, playerId: string): void {
 }
 
 function standingsOf(room: Room) {
+  // คะแนนเท่ากันเรียงตามลำดับการเข้าห้อง ไม่งั้นโพเดียมสลับที่เองระหว่าง re-render
   return [...room.players.values()]
+    .sort((a, b) => b.score - a.score || a.joinedAt - b.joinedAt)
     .map((p) => ({ id: p.id, name: p.name, score: p.score }))
-    .sort((a, b) => b.score - a.score)
 }

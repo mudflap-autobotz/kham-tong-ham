@@ -7,6 +7,9 @@ export const MIN_ROUNDS = 1
 export const MAX_ROUNDS = 10
 export const DEFAULT_ROUNDS = 5
 
+/** หน่วยเวลาพื้นฐาน — ที่อื่นคูณจากค่านี้ ห้ามเขียน 60_000 ซ้ำ */
+export const MS_PER_MINUTE = 60_000
+
 /** ทุก 4 คน เพิ่มเวลา 5 นาที */
 export const PLAYERS_PER_TIME_BUCKET = 4
 export const MINUTES_PER_TIME_BUCKET = 5

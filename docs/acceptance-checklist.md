@@ -53,3 +53,23 @@ npm run dev
 ข้อ 19 (สองห้องไม่กวนกัน) มี integration test ครอบ
 ข้อ 18 (reconnect) มี integration test ครอบ
 checklist นี้ยืนยันซ้ำที่ชั้น UI ซึ่งเทสไม่ได้แตะ
+
+## บันทึกไว้ให้คนถัดไป
+
+### event ที่ server ยิงแต่ client ตั้งใจไม่ฟัง
+
+`round:started` · `player:died` · `round:ended` · `game:ended` ถูก emit ครบตาม spec
+แต่ client ตัวนี้ **ตั้งใจไม่ผูก handler ไว้เลย** ทุกอย่างที่จอต้องรู้มากับ `state:sync`
+ซึ่งเป็น superset ของทั้งสี่ event อยู่แล้ว
+
+อย่าสรุปว่า client จะตอบสนองต่อ event เหล่านี้ ถ้าจะเพิ่ม toast แจ้งคนตายหรือเอฟเฟกต์ตอนจบรอบ
+ต้องผูก handler เองใหม่ — และนั่นเป็นขอบเขตงาน UI ใหม่ที่ spec กับแผนไม่ได้ขอไว้
+
+### rate limit กับ reverse proxy
+
+`RateLimiter` นับตาม `socket.handshake.address` ถ้าเอาไปวางหลัง reverse proxy
+ทุกคนจะกลายเป็น IP เดียวกันคือ proxy แล้วโดนจำกัดร่วมกัน
+
+ตอนนี้ยังไม่แก้โดยเจตนา: ตัวจำกัดคุมแค่การสร้างห้อง deploy เป็น instance เดียว
+และการรองรับ `X-Forwarded-For` ต้องเพิ่ม `TRUST_PROXY` เข้ามา ซึ่งโปรเจกต์นี้ยังไม่มี env config เลยสักตัว
+ถ้าจะ deploy หลัง proxy จริง ให้จัดการเรื่องนี้ก่อน

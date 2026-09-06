@@ -328,6 +328,52 @@ describe('sessionToken กันการสวมตัวตน', () => {
   })
 })
 
+describe('room:leave', () => {
+  it('ออกจากห้องตอน LOBBY แล้วหายจากรายชื่อของคนที่เหลือ', async () => {
+    const host = await createRoom()
+    const hostView = track(host.socket)
+    const g1 = await joinRoom(host.state.code, 'มานี')
+    await joinRoom(host.state.code, 'ปิติ')
+    await hostView.until((s) => s.players.length === 3)
+
+    g1.socket.emit('room:leave')
+    const after = await hostView.until((s) => s.players.length === 2)
+    expect(after.players.some((p) => p.name === 'มานี')).toBe(false)
+  })
+
+  it('host เดินออกจาก LOBBY ตำแหน่งตกเป็นของคนถัดไป ที่กดเริ่มเกมได้จริง', async () => {
+    const host = await createRoom()
+    const g1 = await joinRoom(host.state.code, 'มานี')
+    const g1View = track(g1.socket)
+    const g2 = await joinRoom(host.state.code, 'ปิติ')
+    const g3 = await joinRoom(host.state.code, 'ชูใจ')
+    await g1View.until((s) => s.players.length === 4)
+
+    host.socket.emit('room:leave')
+    const afterLeave = await g1View.until((s) => s.players.length === 3)
+    expect(afterLeave.players.find((p) => p.isHost)!.id).toBe(g1.state.viewerId)
+
+    for (const s of [g1.socket, g2.socket, g3.socket]) s.emit('player:ready', { ready: true })
+    await g1View.until((s) => s.players.every((p) => p.ready))
+
+    // host คนใหม่ต้องสั่งเกมได้จริง ไม่ใช่แค่ธงบนจอ
+    g1.socket.emit('game:start')
+    const playing = await g1View.until((s) => s.phase === 'PLAYING')
+    expect(playing.players).toHaveLength(3)
+  }, 15_000)
+
+  it('ออกระหว่างเล่น ที่นั่งยังอยู่ แค่ขึ้นว่าหลุด', async () => {
+    const { seats } = await playingTrio()
+    const leaver = seats[1]
+
+    leaver.s.emit('room:leave')
+    const after = await seats[0].view.until((s) =>
+      s.players.some((p) => p.id === leaver.state.viewerId && !p.connected),
+    )
+    expect(after.players).toHaveLength(3)
+  }, 15_000)
+})
+
 describe('เกมเต็มรอบ 4 คน', () => {
   it('สร้าง → ready → เล่น → kill → จบรอบ → ทายคำ → สรุป', async () => {
     const host = await createRoom('สมชาย', 2)

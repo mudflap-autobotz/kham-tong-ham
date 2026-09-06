@@ -3,7 +3,7 @@ import { nanoid } from 'nanoid'
 import { z } from 'zod'
 import { COUNTDOWN_MS, ROOM_CREATE_LIMIT, ROOM_CREATE_WINDOW_MS } from '../constants'
 import {
-  beginRound, endRound, endRoundByGm, joinRoom, kickPlayer, nextRound,
+  beginRound, endRound, endRoundByGm, joinRoom, kickPlayer, leaveRoom, nextRound,
   recordKill, restartGame, setReady, startCountdown, submitGuess, undoKill,
 } from './core/game'
 import { maskFor } from './core/mask'
@@ -328,7 +328,7 @@ export function registerHandlers(io: Server, store: RoomStore, deps: Deps = {}):
     socket.on('room:leave', () => {
       const ctx = context(socket)
       if (!ctx) return
-      markDisconnected(ctx.room, ctx.playerId)
+      leaveRoom(ctx.room, ctx.playerId, now())
       void socket.leave(ctx.room.code)
       socket.data = {} satisfies SocketData
       broadcast(ctx.room)

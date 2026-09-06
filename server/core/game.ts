@@ -66,6 +66,31 @@ export function joinRoom(
   return ok(player)
 }
 
+/** ออกจากห้องด้วยความตั้งใจ — ต่างจากเน็ตหลุด ที่ต้องกันที่นั่งไว้ให้ */
+export function leaveRoom(room: Room, playerId: string, now: number): Result {
+  room.lastActivityAt = now
+
+  const player = room.players.get(playerId)
+  if (!player) return fail('PLAYER_NOT_FOUND', 'ไม่พบผู้เล่นคนนี้ในห้อง')
+
+  // ระหว่างเกม ตัวจริงยังนั่งอยู่ในวง ที่นั่งต้องอยู่ครบ — แค่หลุดจอ
+  if (room.phase !== 'LOBBY') {
+    player.connected = false
+    return ok(undefined)
+  }
+
+  room.players.delete(playerId)
+
+  // เจ้าของห้องเดินออก ต้องมีคนสืบทอด ไม่งั้นห้องค้างจนโดนกวาด
+  // spec ไม่ได้กำหนดวิธีเลือก — โปรเจกต์นี้เลือก "คนที่เข้าห้องก่อนและยังต่ออยู่"
+  if (playerId === room.hostId && room.players.size > 0) {
+    const byJoin = [...room.players.values()].sort((a, b) => a.joinedAt - b.joinedAt)
+    room.hostId = (byJoin.find((p) => p.connected) ?? byJoin[0]).id
+  }
+
+  return ok(undefined)
+}
+
 export function setReady(room: Room, playerId: string, ready: boolean): Result {
   if (room.phase !== 'LOBBY') {
     return fail('WRONG_PHASE', 'กดพร้อมได้เฉพาะตอนรออยู่ในห้อง')

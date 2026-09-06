@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import { createRoom, joinRoom, setReady, startCountdown, beginRound } from './game'
 import {
-  recordKill, undoKill, endRound, endRoundByGm, kickPlayer,
+  recordKill, undoKill, endRound, endRoundByGm, kickPlayer, leaveRoom,
   submitGuess, nextRound, restartGame,
 } from './game'
 import { MAX_PLAYERS } from '../../constants'
@@ -329,6 +329,70 @@ describe('undoKill', () => {
     const r = undoKill(room, gmId, 5)
     expect(r.ok).toBe(false)
     if (!r.ok) expect(r.code).toBe('INVALID_TARGET')
+  })
+})
+
+describe('leaveRoom', () => {
+  it('ออกจาก LOBBY แล้วที่นั่งหายไปจริง ไม่ใช่แค่ขึ้นว่าหลุด', () => {
+    const room = roomWithPlayers(4)
+    const r = leaveRoom(room, 'p3', NOW + 5)
+
+    expect(r.ok).toBe(true)
+    expect(room.players.has('p3')).toBe(false)
+    expect(room.players.size).toBe(3)
+    expect(room.lastActivityAt).toBe(NOW + 5)
+  })
+
+  it('host เดินออก ตำแหน่งตกเป็นของคนที่เข้าก่อนและยังต่ออยู่', () => {
+    const room = roomWithPlayers(4)
+    // p2 เข้าก่อนแต่หลุดไปแล้ว จึงต้องข้ามไปหา p3
+    room.players.get('p2')!.connected = false
+    room.players.get('p3')!.joinedAt = NOW + 1
+    room.players.get('p4')!.joinedAt = NOW + 2
+
+    leaveRoom(room, 'p1', NOW + 10)
+    expect(room.hostId).toBe('p3')
+  })
+
+  it('ไม่มีใครต่ออยู่เลย ตกเป็นของคนที่เข้าก่อนสุด', () => {
+    const room = roomWithPlayers(3)
+    for (const p of room.players.values()) p.connected = false
+    room.players.get('p2')!.joinedAt = NOW + 1
+    room.players.get('p3')!.joinedAt = NOW + 2
+
+    leaveRoom(room, 'p1', NOW + 10)
+    expect(room.hostId).toBe('p2')
+  })
+
+  it('คนที่ออกไม่ใช่ host ตำแหน่ง host ไม่เปลี่ยน', () => {
+    const room = roomWithPlayers(3)
+    leaveRoom(room, 'p2', NOW)
+    expect(room.hostId).toBe('p1')
+  })
+
+  it('ห้องว่างหมด ไม่ลบห้องทิ้งเอง — room-store เป็นเจ้าของอายุห้อง', () => {
+    const room = roomWithPlayers(1)
+    leaveRoom(room, 'p1', NOW)
+    expect(room.players.size).toBe(0)
+    expect(room.hostId).toBe('p1')
+  })
+
+  it('ออกระหว่างเล่น ที่นั่งยังอยู่และยังนับเป็นคนรอด', () => {
+    const { room, others } = playingRoom()
+    const leaver = others[0]
+
+    const r = leaveRoom(room, leaver, NOW)
+    expect(r.ok).toBe(true)
+    expect(room.players.has(leaver)).toBe(true)
+    expect(room.players.get(leaver)!.connected).toBe(false)
+    expect(room.round!.alive.has(leaver)).toBe(true)
+  })
+
+  it('คนที่ไม่มีในห้อง ตอบ PLAYER_NOT_FOUND', () => {
+    const room = roomWithPlayers(3)
+    const r = leaveRoom(room, 'ghost', NOW)
+    expect(r.ok).toBe(false)
+    if (!r.ok) expect(r.code).toBe('PLAYER_NOT_FOUND')
   })
 })
 

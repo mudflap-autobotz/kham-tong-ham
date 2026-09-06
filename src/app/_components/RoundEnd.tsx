@@ -3,6 +3,7 @@
 import { useState } from 'react'
 import { MAX_GUESS_LENGTH } from '../../../constants'
 import type { RoomApi } from '../../lib/use-room'
+import { GmToolbar } from './GmToolbar'
 import { PlayerCard } from './PlayerCard'
 
 const END_REASON_TEXT: Record<string, string> = {
@@ -20,7 +21,7 @@ export function RoundEnd({ api }: { api: RoomApi }) {
   const standings = [...state.players].sort((a, b) => b.score - a.score)
 
   return (
-    <main className="mx-auto flex min-h-dvh max-w-md flex-col gap-3 p-4">
+    <main className="mx-auto flex min-h-dvh max-w-md flex-col gap-3 p-4 pb-56">
       <h2 className="text-xl font-bold">
         จบรอบ {state.currentRound} — {END_REASON_TEXT[state.endReason ?? ''] ?? ''}
       </h2>
@@ -63,6 +64,13 @@ export function RoundEnd({ api }: { api: RoomApi }) {
         </p>
       )}
 
+      {/* รอดอยู่แต่เคยเห็นคำตัวเองแล้ว (GM undo ให้) — ไม่งั้นตรงนี้จะเป็นที่ว่างเปล่า */}
+      {me && me.isAlive && !me.canGuess && !me.hasGuessed && (
+        <p className="rounded-xl bg-slate-800 p-3 text-center text-slate-400">
+          คุณเห็นคำของตัวเองไปแล้วในรอบนี้ จึงไม่มีสิทธิ์ทายคำ
+        </p>
+      )}
+
       <div className="mt-2 text-sm text-slate-400">เฉลยคำทุกคน</div>
       {state.players.map((p) => (
         <PlayerCard key={p.id} player={p} isMe={p.id === state.viewerId} />
@@ -92,6 +100,9 @@ export function RoundEnd({ api }: { api: RoomApi }) {
       {!api.isHost && (
         <p className="mt-4 text-center text-slate-500">รอ host กดไปต่อ</p>
       )}
+
+      {/* รอบที่ปิดตัวเองเพราะเหลือคนสุดท้าย ยังย้อนการบันทึกตัวนั้นได้ */}
+      {api.isGm && state.endReason === 'LAST_MAN' && <GmToolbar api={api} />}
     </main>
   )
 }

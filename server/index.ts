@@ -1,7 +1,7 @@
 import { createServer } from 'node:http'
 import next from 'next'
 import { Server } from 'socket.io'
-import { SWEEP_INTERVAL_MS } from '../constants'
+import { RECONNECT_GRACE_MS, SWEEP_INTERVAL_MS } from '../constants'
 import { RoomStore } from './core/room-store'
 import { registerHandlers } from './socket-handlers'
 
@@ -19,8 +19,7 @@ const httpServer = createServer((req, res) => {
 
 const io = new Server(httpServer, {
   path: '/api/socket',
-  // ผู้เล่นบนมือถือสลับเครือข่ายบ่อย ให้เวลากลับมาก่อนถือว่าหลุด
-  connectionStateRecovery: { maxDisconnectionDuration: 30_000 },
+  connectionStateRecovery: { maxDisconnectionDuration: RECONNECT_GRACE_MS },
 })
 
 const store = new RoomStore()

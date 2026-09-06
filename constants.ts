@@ -33,3 +33,10 @@ export const MAX_NAME_LENGTH = 20
 export const MAX_GUESS_LENGTH = 60
 /** playerId มาจาก nanoid() ฝั่ง client อาจส่ง id เก่ามาตอน reconnect */
 export const MAX_PLAYER_ID_LENGTH = 64
+
+/** ผู้เล่นบนมือถือสลับเครือข่ายบ่อย ให้เวลากลับมาก่อนถือว่าหลุด */
+export const RECONNECT_GRACE_MS = 30_000
+/** ถี่กว่า 1 วินาที เพื่อไม่ให้เลขบนจอกระตุกข้ามวินาทีเวลา timer ถูกเลื่อน */
+export const COUNTDOWN_TICK_MS = 250
+/** เหลือเวลาน้อยกว่านี้ ตัวเลขเปลี่ยนเป็นสีแดงเตือน */
+export const TIME_WARNING_SECONDS = 30

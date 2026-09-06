@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
+import { COUNTDOWN_TICK_MS } from '../../constants'
 
 /**
  * นับถอยหลังจาก timestamp ปลายทาง
@@ -16,7 +17,7 @@ export function useCountdown(target: number | null): number {
     }
 
     setRemaining(secondsLeft(target))
-    const id = setInterval(() => setRemaining(secondsLeft(target)), 250)
+    const id = setInterval(() => setRemaining(secondsLeft(target)), COUNTDOWN_TICK_MS)
     return () => clearInterval(id)
   }, [target])
 

@@ -1,4 +1,5 @@
 import './globals.css'
+import { Suspense } from 'react'
 import type { Metadata, Viewport } from 'next'
 
 export const metadata: Metadata = {
@@ -15,7 +16,9 @@ export const viewport: Viewport = {
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="th">
-      <body>{children}</body>
+      <body>
+        <Suspense fallback={null}>{children}</Suspense>
+      </body>
     </html>
   )
 }

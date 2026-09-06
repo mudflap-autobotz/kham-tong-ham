@@ -170,7 +170,7 @@ describe('การตรวจสิทธิ์', () => {
     }
     await new Promise((r) => setTimeout(r, 100))
 
-    const playing = once<MaskedRoomState>(host.socket, 'round:started', 8000)
+    const playing = once<{ gmId: string }>(host.socket, 'round:started', 8000)
     host.socket.emit('game:start')
     const started = await playing
 
@@ -180,9 +180,8 @@ describe('การตรวจสิทธิ์', () => {
       { s: g1.socket, id: g1.state.viewerId },
       { s: g2.socket, id: g2.state.viewerId },
     ]
-    const gm = started.players.find((p) => p.isGm)!
-    const notGm = sockets.find((x) => x.id !== gm.id)!
-    const victim = sockets.find((x) => x.id !== gm.id && x.id !== notGm.id)!
+    const notGm = sockets.find((x) => x.id !== started.gmId)!
+    const victim = sockets.find((x) => x.id !== started.gmId && x.id !== notGm.id)!
 
     const p = once<{ code: string }>(notGm.s, 'error')
     notGm.s.emit('gm:kill', { victimId: victim.id, killerId: notGm.id })
@@ -196,16 +195,15 @@ describe('การซ่อนคำ', () => {
     const g1 = await joinRoom(host.state.code, 'มานี')
     const g2 = await joinRoom(host.state.code, 'ปิติ')
 
+    const views = [track(host.socket), track(g1.socket), track(g2.socket)]
+
     for (const s of [host.socket, g1.socket, g2.socket]) {
       s.emit('player:ready', { ready: true })
     }
     await new Promise((r) => setTimeout(r, 100))
 
-    const all = [host.socket, g1.socket, g2.socket].map((s) =>
-      once<MaskedRoomState>(s, 'round:started', 8000),
-    )
     host.socket.emit('game:start')
-    const states = await Promise.all(all)
+    const states = await Promise.all(views.map((v) => v.until((s) => s.phase === 'PLAYING')))
 
     for (const st of states) {
       const me = st.players.find((p) => p.id === st.viewerId)!
@@ -324,4 +322,29 @@ describe('เกมเต็มรอบ 4 คน', () => {
     // จบเกมแล้วเปิดคำทุกคน
     for (const p of finalState.players) expect(p.word).toBeTruthy()
   }, 20_000)
+})
+
+describe('สลับห้อง', () => {
+  it('คนหนึ่งอยู่ได้ห้องเดียว — ย้ายห้องแล้วห้องเก่าเห็นว่าหลุด', async () => {
+    const hostA = await createRoom('เจ้าของห้อง A')
+    const hostB = await createRoom('เจ้าของห้อง B')
+
+    const hostAView = track(hostA.socket)
+
+    const wanderer = await joinRoom(hostA.state.code, 'คนเร่ร่อน')
+    await hostAView.until((s) => s.players.length === 2)
+
+    const wandererView = track(wanderer.socket)
+    wanderer.socket.emit('room:join', { code: hostB.state.code, name: 'คนเร่ร่อน' })
+
+    const roomAAfter = await hostAView.until((s) =>
+      s.players.some((p) => p.name === 'คนเร่ร่อน' && !p.connected),
+    )
+    const wandererInA = roomAAfter.players.find((p) => p.name === 'คนเร่ร่อน')!
+    expect(wandererInA.connected).toBe(false)
+
+    const roomBAfter = await wandererView.until((s) => s.players.length === 2)
+    expect(roomBAfter.code).toBe(hostB.state.code)
+    expect(roomBAfter.players).toHaveLength(2)
+  })
 })

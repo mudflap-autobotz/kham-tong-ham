@@ -31,3 +31,5 @@ export const ROOM_CODE_ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'
 
 export const MAX_NAME_LENGTH = 20
 export const MAX_GUESS_LENGTH = 60
+/** playerId มาจาก nanoid() ฝั่ง client อาจส่ง id เก่ามาตอน reconnect */
+export const MAX_PLAYER_ID_LENGTH = 64

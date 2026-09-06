@@ -25,16 +25,12 @@ export function registerHandlers(io: Server, store: RoomStore, deps: Deps = {}):
   const limiter = new RateLimiter(ROOM_CREATE_LIMIT, ROOM_CREATE_WINDOW_MS)
   const timers = new Map<string, NodeJS.Timeout>()
 
-  /**
-   * ส่ง state ให้ทุกคนในห้อง โดยแต่ละคนได้มุมมองของตัวเอง
-   * ใช้ event name อื่นได้ (เช่น 'round:started') เมื่อ client ต้องแยกแยะ
-   * ช่วงเปลี่ยนผ่านจาก state:sync ทั่วไป — payload ยังผ่าน maskFor() เหมือนกันเสมอ
-   */
-  function broadcast(room: Room, event: string = 'state:sync'): void {
+  /** ส่ง state ให้ทุกคนในห้อง โดยแต่ละคนได้มุมมองของตัวเอง */
+  function broadcast(room: Room): void {
     for (const socket of io.of('/').sockets.values()) {
       const data = socket.data as SocketData
       if (data.roomCode !== room.code || !data.playerId) continue
-      socket.emit(event, maskFor(room, data.playerId))
+      socket.emit('state:sync', maskFor(room, data.playerId))
     }
   }
 
@@ -79,9 +75,12 @@ export function registerHandlers(io: Server, store: RoomStore, deps: Deps = {}):
       return
     }
 
-    // round:started ต้องเป็นมุมมองที่ maskFor() แล้วต่อคน (ไม่ใช่ payload กลาง)
-    // เพราะ client ต้องรู้ทันทีว่าใครเป็น GM และคำของใครเปิดให้เห็นบ้าง
-    broadcast(room, 'round:started')
+    io.to(room.code).emit('round:started', {
+      round: room.currentRound,
+      gmId: room.round!.gmId,
+      packTheme: room.round!.packTheme,
+      endsAt: room.round!.endsAt,
+    })
     broadcast(room)
     scheduleRoundEnd(room)
   }
@@ -99,6 +98,25 @@ export function registerHandlers(io: Server, store: RoomStore, deps: Deps = {}):
       return null
     }
     return { room, playerId: data.playerId }
+  }
+
+  /**
+   * คนหนึ่งอยู่ได้ห้องเดียว — เรียกก่อนผูก socket.data ใหม่เสมอตอน create/join ห้อง
+   * ถ้ามีห้องเก่าอยู่และไม่ใช่ห้องเดียวกัน ต้องบอกห้องเก่าว่าคนนี้หลุดแล้วจริงๆ
+   * ไม่ใช่แค่ socket.leave() ระดับ transport ไม่งั้นห้องเก่าเห็นค้างว่า connected อยู่
+   * และ socket ยังอาจรับ event ของห้องเก่าที่ยิงผ่าน io.to(oldCode).emit() ต่อไป
+   */
+  function leaveOldRoom(socket: Socket, newCode: string): void {
+    const data = socket.data as SocketData
+    const oldCode = data.roomCode
+    const oldPlayerId = data.playerId
+    if (!oldCode || !oldPlayerId || oldCode === newCode) return
+
+    void socket.leave(oldCode)
+    const oldRoom = store.get(oldCode)
+    if (!oldRoom) return
+    markDisconnected(oldRoom, oldPlayerId)
+    broadcast(oldRoom)
   }
 
   /** validate payload แล้วเรียก fn — ทุก handler ที่รับ payload ต้องผ่านทางนี้ */
@@ -133,6 +151,7 @@ export function registerHandlers(io: Server, store: RoomStore, deps: Deps = {}):
         }
 
         const room = result.value
+        leaveOldRoom(socket, room.code)
         socket.data = { playerId, roomCode: room.code } satisfies SocketData
         void socket.join(room.code)
         socket.emit('state:sync', maskFor(room, playerId))
@@ -154,10 +173,7 @@ export function registerHandlers(io: Server, store: RoomStore, deps: Deps = {}):
           return
         }
 
-        // คนหนึ่งอยู่ได้ห้องเดียว
-        const prev = (socket.data as SocketData).roomCode
-        if (prev && prev !== room.code) void socket.leave(prev)
-
+        leaveOldRoom(socket, room.code)
         socket.data = { playerId, roomCode: room.code } satisfies SocketData
         void socket.join(room.code)
         broadcast(room)
@@ -270,7 +286,12 @@ export function registerHandlers(io: Server, store: RoomStore, deps: Deps = {}):
         return
       }
 
-      broadcast(ctx.room, 'round:started')
+      io.to(ctx.room.code).emit('round:started', {
+        round: ctx.room.currentRound,
+        gmId: ctx.room.round!.gmId,
+        packTheme: ctx.room.round!.packTheme,
+        endsAt: ctx.room.round!.endsAt,
+      })
       broadcast(ctx.room)
       scheduleRoundEnd(ctx.room)
     })

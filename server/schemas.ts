@@ -1,11 +1,11 @@
 import { z } from 'zod'
 import {
-  MAX_GUESS_LENGTH, MAX_NAME_LENGTH, MAX_ROUNDS,
+  MAX_GUESS_LENGTH, MAX_NAME_LENGTH, MAX_PLAYER_ID_LENGTH, MAX_ROUNDS,
   MIN_ROUNDS, ROOM_CODE_LENGTH,
 } from '../constants'
 
 const playerName = z.string().trim().min(1, 'กรุณากรอกชื่อ').max(MAX_NAME_LENGTH)
-const playerId = z.string().min(1).max(64)
+const playerId = z.string().min(1).max(MAX_PLAYER_ID_LENGTH)
 
 export const createRoomSchema = z.object({
   name: playerName,

@@ -1,6 +1,6 @@
 import { nanoid } from 'nanoid'
 import { COUNTDOWN_MS, MAX_PLAYERS, MIN_PLAYERS } from '../../constants'
-import { dealWords, loadPacks, pickPack } from './packs'
+import { dealWords, injectWildcard, loadPacks, loadWildcards, pickPack } from './packs'
 import { addScore, isCorrectGuess } from './scoring'
 import { roundDurationMs } from './timing'
 import {
@@ -150,7 +150,7 @@ export function beginRound(
     packId: pack.id,
     packTheme: pack.theme,
     gmId: pickGm(playerIds, room.lastGmId, rng),
-    assignments: dealWords(pack, playerIds, rng),
+    assignments: injectWildcard(dealWords(pack, playerIds, rng), loadWildcards(), rng),
     alive: new Set(playerIds),
     wordBurned: new Set(),
     deaths: [],

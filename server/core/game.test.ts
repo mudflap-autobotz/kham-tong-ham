@@ -156,7 +156,7 @@ describe('beginRound', () => {
     const room = roomWithPlayers(4)
     startCountdown(room, 'p1', NOW)
     beginRound(room, NOW, () => 0)
-    expect(room.round!.endsAt).toBe(NOW + 5 * 60_000)
+    expect(room.round!.endsAt).toBe(NOW + 3 * 60_000)
   })
 
   it('ทุกคนเริ่มต้นด้วยสถานะยังไม่ตาย', () => {

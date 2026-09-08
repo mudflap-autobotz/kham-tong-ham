@@ -10,9 +10,14 @@ export const DEFAULT_ROUNDS = 5
 /** หน่วยเวลาพื้นฐาน — ที่อื่นคูณจากค่านี้ ห้ามเขียน 60_000 ซ้ำ */
 export const MS_PER_MINUTE = 60_000
 
-/** ทุก 4 คน เพิ่มเวลา 5 นาที */
+/** ทุก 4 คน เพิ่มเวลา 3 นาที */
 export const PLAYERS_PER_TIME_BUCKET = 4
-export const MINUTES_PER_TIME_BUCKET = 5
+export const MINUTES_PER_TIME_BUCKET = 3
+
+/** โอกาสที่รอบหนึ่งจะมีคำวิเศษ (คำใช้ทั่วไป หลุดธีม) แทรกเข้ามา 1 คำ */
+export const WILDCARD_CHANCE = 0.5
+/** ลึกกว่า MAX_PLAYERS มาก เพื่อให้แต่ละรอบหยิบคำได้ชุดต่างกันจริง */
+export const MIN_WORDS_PER_PACK = 20
 
 export const COUNTDOWN_MS = 3_000
 
